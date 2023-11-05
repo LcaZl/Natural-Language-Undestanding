@@ -39,12 +39,13 @@ if __name__ == "__main__":
 
     print('\nLoading datasets ...\n')
 
-    subj_fold_dataset, subj_test, subj_lang = load_subj_dataset(kfold, vocab_size, test_size)
+    subj_fold_dataset, subj_test, subj_lang = load_dataset('Subjectivity', kfold, vocab_size, test_size)
     print('Subjectivity dataset folds (', len(subj_fold_dataset), '):')
     for k, fold in enumerate(subj_fold_dataset):
         print('- Fold',k,' dim -> Train:',len(fold[0]), 'Dev:', len(fold[1]))
 
-    mr_fold_dataset, mr_test, mr_lang = load_mr_dataset(kfold, vocab_size, test_size)
+
+    mr_fold_dataset, mr_test, mr_lang = load_dataset('Movie_reviews', kfold, vocab_size, test_size)
     print('Movie reviews dataset folds (', len(mr_fold_dataset), '):')
     for sample in mr_fold_dataset:
         print('- Fold',k,' dim -> Train:',len(fold[0]), 'Dev:', len(fold[1]))
@@ -54,6 +55,8 @@ if __name__ == "__main__":
         'Experiment_1':{
             'epochs':5,
             'runs':5,
+            'clip':5,
+            'n_splits':10,
             'learning_rate': 1e-4,
             'hidden_layer_size': 300,
             'embedding_layer_size' : 300,
@@ -62,12 +65,13 @@ if __name__ == "__main__":
             'mr_vocab_size': mr_lang.vocab_size,
             'subj_vocab_size': subj_lang.vocab_size,
             'bidirectional':False,
-            'movie_review_train':mr_fold_dataset,
-            'movie_review_test':mr_test,
-            'subj_train':subj_fold_dataset,
-            'subj_test':subj_test,
+            'mr_train_folds':mr_fold_dataset,
+            'mr_test_loader':mr_test,
+            'subj_train_folds':subj_fold_dataset,
+            'subj_test_loader':subj_test,
             'movie_review_lang':mr_lang,
-            'subj_lang':subj_lang
+            'subj_lang':subj_lang,
+            'criterion': nn.CrossEntropyLoss(ignore_index = PAD_TOKEN)
         }
     }
 

@@ -3,10 +3,11 @@
 import pandas as pd
 import os
 import torch.optim as optim
-import tqdm
+from tqdm import tqdm
 import numpy as np
 import math
 from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import classification_report
 
 from utils import *
 from model import *
@@ -44,19 +45,21 @@ def execute_experiments(experiments_parameters):
             if os.path.exists(model_filename):
                 pass
             else:
-                model = SBJ_Model(
+                model = SUBJ_Model(
                     hidden_size=parameters['hidden_layer_size'],
                     embedding_size=parameters['embedding_layer_size'],
                     output_size=parameters['output_size'],
                     vocab_size=parameters['subj_vocab_size'],
                     dropout=parameters['dropout'],
                     bidirectional=parameters['bidirectional'],                    
-                )
+                ).to(DEVICE)
                 model.apply(init_weights)
 
                 optimizer = optim.Adam(model.parameters(), lr = parameters['learning_rate'])
-                report_slot, report_intent, train_losses, eval_losses = train_lm(model, parameters, optimizer)
-
+                parameters['model'] = 'SUBJ'
+                report, tr_losses, eval_losses = train_lm(model, parameters, optimizer)
+                print('Report:', report)
+                print(tr_losses, eval_losses)
 
 def train_lm(model, parameters, optimizer):
     losses_train = []
@@ -64,13 +67,20 @@ def train_lm(model, parameters, optimizer):
     best_loss = math.inf
     patience = 3
 
-    for i in tqdm(range(0,parameters['epochs'])):
-        loss = train_loop(parameters['train_loader'], optimizer, model, parameters)
-        losses_train.append(np.asarray(loss).mean())
+    for i in tqdm(range(0,parameters['n_splits'])):
+
+        if parameters['model'] == 'SUBJ':
+            train_loader, dev_loader = parameters['subj_train_folds'][i]
+        else:
+            train_loader, dev_loader = parameters['mr_train_folds'][i]
+
+        tr_loss = train_loop(train_loader, optimizer, model, parameters)
+
+        losses_train.append(tr_loss)
 
         if i % 5 == 0:
 
-            eval_loss, _ = eval_loop(parameters['dev_loader'], model, parameters)
+            eval_loss, report = eval_loop(dev_loader, model, parameters)
             losses_eval.append(eval_loss)
 
             if eval_loss < best_loss:
@@ -81,45 +91,64 @@ def train_lm(model, parameters, optimizer):
             if patience <= 0: # Early stopping with patience
                 break # Not nice but it keeps the code clean
 
-    eval_loss, _ = eval_loop(parameters['test_loader'], model, parameters)
+    if parameters['model'] == 'SUBJ':
+        eval_loss, report = eval_loop(parameters['subj_test_loader'], model, parameters)
+    else:
+        eval_loss, report = eval_loop(parameters['mr_test_loader'], model, parameters)
+
     losses_eval.append(eval_loss)
 
-    return report_slot, report_intent, losses_train, losses_eval
+    return report, losses_train, losses_eval
 
-def train_loop(data_loader, optimizer, criterion, model, clip=5):
+def train_loop(data_loader, optimizer, model, parameters):
     model.train()
-    total_loss = 0
-    total_tokens = 0
+    losses = []
 
     for sample in data_loader:
-        texts, labels, lengths = sample['text'], sample['label'], sample['length']
+        texts, labels, lengths = sample['text'], sample['labels'], sample['lengths']
+        print('TRAINLOOP:',sample['text'].shape, sample['labels'].shape, sample['lengths'].shape)
+
+        # Assicurati che le dimensioni di labels siano corrette.
+        # labels deve essere un vettore 1D con il valore di classe per ciascun elemento nel batch.
+
         optimizer.zero_grad()
+        
+        # Assicurati che le dimensioni di output siano corrette.
+        # output deve essere di forma (batch_size, num_classes)
         output = model(texts, lengths)
-        loss = criterion(output, labels)
+
+        print('MODELOUTPUSHAPE:', output.shape)
+        
+        # Calcola la loss
+        loss = parameters['criterion'](output, labels)
+        losses.append(loss.item())
+
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
+
         optimizer.step()
 
-        total_loss += loss.item() * len(labels)
-        total_tokens += len(labels)
-        
-    average_loss = total_loss / total_tokens
-    return average_loss
+    return np.mean(losses)
 
-def eval_loop(data_loader, criterion, model):
+def eval_loop(data_loader, model, parameters):
     model.eval()
-    total_loss = 0
-    total_tokens = 0
+    all_preds = []
+    all_labels = []    
+    losses = []
 
     with torch.no_grad():
         for sample in data_loader:
-            texts, labels, lengths = sample['text'], sample['label'], sample['length']
-            output = model(texts, lengths)
-            loss = criterion(output, labels)
+            texts, labels, lengths = sample['text'], sample['labels'], sample['lengths']
+            outputs = model(texts, lengths)            
+            loss = parameters['criterion'](outputs, labels)
 
-            total_loss += loss.item() * len(labels)
-            total_tokens += len(labels)
+            losses.append(loss.item())
 
-    average_loss = total_loss / total_tokens
-    return average_loss
+            _, preds = torch.max(outputs, 1)
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    report = classification_report(all_labels, all_preds, target_names=['Objective', 'Subjective'])
+
+    return np.mean(losses), report
 
