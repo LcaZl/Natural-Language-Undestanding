@@ -27,7 +27,7 @@ print(len(subjectivity.sents()))
 
 """
 from functions import *
-
+CUDA_LAUNCH_BLOCKING=1
 if __name__ == "__main__":
 
     #Wrtite the code to load the datasets and to run your functions
@@ -35,17 +35,17 @@ if __name__ == "__main__":
 
     vocab_size = 10000
     test_size = 0.2 # Train, dev, test
-    kfold = KFold(n_splits = 10, shuffle=True, random_state=42)
+    skf = StratifiedKFold(n_splits=10)
 
     print('\nLoading datasets ...\n')
 
-    subj_fold_dataset, subj_test, subj_lang = load_dataset('Subjectivity', kfold, vocab_size, test_size)
+    subj_fold_dataset, subj_test, subj_lang = load_dataset('Subjectivity', skf, vocab_size, test_size)
     print('Subjectivity dataset folds (', len(subj_fold_dataset), '):')
     for k, fold in enumerate(subj_fold_dataset):
         print('- Fold',k,' dim -> Train:',len(fold[0]), 'Dev:', len(fold[1]))
 
 
-    mr_fold_dataset, mr_test, mr_lang = load_dataset('Movie_reviews', kfold, vocab_size, test_size)
+    mr_fold_dataset, mr_test, mr_lang = load_dataset('Movie_reviews', skf, vocab_size, test_size)
     print('Movie reviews dataset folds (', len(mr_fold_dataset), '):')
     for sample in mr_fold_dataset:
         print('- Fold',k,' dim -> Train:',len(fold[0]), 'Dev:', len(fold[1]))
@@ -53,13 +53,11 @@ if __name__ == "__main__":
     experiments = {
 
         'Experiment_1':{
-            'epochs':5,
-            'runs':5,
             'clip':5,
             'n_splits':10,
-            'learning_rate': 1e-4,
-            'hidden_layer_size': 300,
-            'embedding_layer_size' : 300,
+            'learning_rate': 0.001,
+            'hidden_layer_size': 200,
+            'embedding_layer_size' : 200,
             'output_size':2,
             'dropout': 0.1,
             'mr_vocab_size': mr_lang.vocab_size,

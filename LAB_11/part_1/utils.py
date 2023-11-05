@@ -6,11 +6,8 @@ from torch.utils.data import DataLoader
 from collections import Counter
 from sklearn.model_selection import train_test_split
 from torch.nn.utils.rnn import pad_sequence
-from functools import partial
 from nltk.corpus import movie_reviews
 import torch.utils.data as data
-import itertools
-import math
 from sklearn.model_selection import KFold
 # Assure that we have the necessary data downloaded
 nltk.download('subjectivity')
@@ -25,15 +22,17 @@ from nltk.stem import WordNetLemmatizer
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
-DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-def load_dataset(dataset_name, kfold, vocab_size=10000, test_size = 0.2):
+DEVICE = 'cuda:0'
+INFO_ENABLED = True
+
+def load_dataset(dataset_name, kfold, vocab_size=10000, test_size = 0.1):
     print(f'\nLoading Dataset {dataset_name}...')
 
     
     if dataset_name == 'Subjectivity':
     # Load subjectivity dataset and preprocess texts
         print(' - Categories:', subjectivity.categories())
-        grp1_sentences = [(preprocess(' '.join(sent)), 'subj') for sent in subjectivity.sents(categories='subj')]
+        grp1_sentences = [(preprocess(' '.join(sent)), 'subj') for sent in subjectivity.sents(categories='subj')] # (Lista token, label)
         grp2_sentences = [(preprocess(' '.join(sent)), 'obj') for sent in subjectivity.sents(categories='obj')]
         categories = subjectivity.categories()
     elif dataset_name == 'Movie_reviews':
@@ -48,13 +47,14 @@ def load_dataset(dataset_name, kfold, vocab_size=10000, test_size = 0.2):
     all_sentences = grp1_sentences + grp2_sentences
 
     # Dividi il dataset in train e test
-    train_sentences, test_sentences = train_test_split(all_sentences, test_size=test_size, random_state=42)
+    train_sentences, test_sentences = train_test_split(all_sentences, test_size=test_size, random_state=42, shuffle = True)
 
     # Build vocabulary
     lang = Lang(train_sentences, categories, vocab_size)
 
+    train_labels = [label for _, label in train_sentences]
     fold_datasets = []  # This will store the dataset splits
-    for train_indices, val_indices in kfold.split(train_sentences):
+    for train_indices, val_indices in kfold.split(train_sentences, train_labels):
         # Split the data into training and validation sets for the current fold
         train_samples = [train_sentences[i] for i in train_indices]
         val_samples = [train_sentences[i] for i in val_indices]
@@ -84,9 +84,11 @@ def load_dataset(dataset_name, kfold, vocab_size=10000, test_size = 0.2):
 class Lang:
     def __init__(self, text, classes, vocab_size):
         self.word2id = self.mapping_seq([el for el, _ in text], vocab_size=vocab_size, special_token = True)
-        self.vocab_size = len(self.word2id) - 1 # PAD ?
+        self.vocab_size = len(self.word2id)
         self.id2word = {id: word for word, id in self.word2id.items()}
-        self.class2id = self.mapping_seq([[cls] for cls in classes], special_token=False)
+        self.class2id = {}
+        for i, cls in enumerate(classes):
+            self.class2id[cls] = i
 
         print(' - Classes Ids:',self.class2id)
 
@@ -96,7 +98,7 @@ class Lang:
     def decode(self, sentence_ids):
         return [self.id2word[id] for id in sentence_ids]
     
-    def mapping_seq(self, sentences, vocab_size = 9999999, special_token = False):
+    def mapping_seq(self, sentences, vocab_size, special_token = False):
         word_counts = Counter(word for sent in sentences for word in sent)
         most_common_words = word_counts.most_common(vocab_size)
         vocab = {}
@@ -126,7 +128,7 @@ class Dataset(data.Dataset):
         tensor_sentence = torch.LongTensor(encoded_sentence)
         tensor_label = self.lang.class2id[label]
 
-        if self.first:
+        if self.first and INFO_ENABLED:
             print('- Sample (Label:', label, ')')
             print('-- Sentence:', sentence)
             print('-- Encoded :', encoded_sentence)
@@ -151,6 +153,7 @@ def preprocess(text, mark_neg = False):
 
     return tokens
     
+
 def collate_fn(batch):
 
     def merge(sequences):
@@ -158,8 +161,12 @@ def collate_fn(batch):
         merge from batch * sent_len to batch * max_len 
         '''
         lengths = [len(seq) for seq in sequences]
-        print('merge', seq, len(seq))
+        for i,l in enumerate(lengths):
+            if l == 0:
+                print(sequences[i])
+                exit(0)
         max_len = 1 if max(lengths)==0 else max(lengths)
+
         # Pad token is zero in our case
         # So we create a matrix full of PAD_TOKEN (i.e. 0) with the shape 
         # batch_size X maximum length of a sequence
@@ -167,6 +174,7 @@ def collate_fn(batch):
         for i, seq in enumerate(sequences):
             end = lengths[i]
             padded_seqs[i, :end] = seq # We copy each sequence into the matrix
+
         padded_seqs = padded_seqs.detach()  # We remove these tensors from the computational graph
         return padded_seqs, lengths
 
@@ -181,7 +189,7 @@ def collate_fn(batch):
     new_item['text'] = source.to(DEVICE)
     new_item['labels'] = torch.LongTensor(new_item['label']).to(DEVICE)
     new_item['lengths'] = torch.LongTensor(lengths).to(DEVICE)
-
-    print('COLLATEFN:',new_item['text'].shape, new_item['labels'].shape, new_item['lengths'].shape)
+    #if INFO_ENABLED:
+       # print('COLLATEFN:',new_item['text'].shape, new_item['labels'].shape, new_item['lengths'].shape)
     return new_item
 

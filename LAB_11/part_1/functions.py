@@ -12,6 +12,7 @@ from sklearn.metrics import classification_report
 from utils import *
 from model import *
 
+
 def init_weights(model):
     for m in model.modules():
         if isinstance(m, nn.RNN):
@@ -37,35 +38,32 @@ def execute_experiments(experiments_parameters):
                 print(f' - {key}: {value}')
 
         print(f'\nStart Training:')
-        measures = []
-        for run in range(parameters['runs']):
-            print(f'- Run {run}')
-            model_filename = f"models_weight/{exp_id}.pth"
+        model_filename = f"models_weight/{exp_id}.pth"
 
-            if os.path.exists(model_filename):
-                pass
-            else:
-                model = SUBJ_Model(
-                    hidden_size=parameters['hidden_layer_size'],
-                    embedding_size=parameters['embedding_layer_size'],
-                    output_size=parameters['output_size'],
-                    vocab_size=parameters['subj_vocab_size'],
-                    dropout=parameters['dropout'],
-                    bidirectional=parameters['bidirectional'],                    
-                ).to(DEVICE)
-                model.apply(init_weights)
+        if os.path.exists(model_filename):
+            pass
+        else:
+            model = SUBJ_Model(
+                hidden_size=parameters['hidden_layer_size'],
+                embedding_size=parameters['embedding_layer_size'],
+                output_size=parameters['output_size'],
+                vocab_size=parameters['subj_vocab_size'],
+                dropout=parameters['dropout'],
+                bidirectional=parameters['bidirectional'],                    
+            ).to(DEVICE)
+            model.apply(init_weights)
 
-                optimizer = optim.Adam(model.parameters(), lr = parameters['learning_rate'])
-                parameters['model'] = 'SUBJ'
-                report, tr_losses, eval_losses = train_lm(model, parameters, optimizer)
-                print('Report:', report)
-                print(tr_losses, eval_losses)
+            optimizer = optim.Adam(model.parameters(), lr = parameters['learning_rate'])
+            parameters['model'] = 'SUBJ'
+            report, tr_losses, eval_losses = train_lm(model, parameters, optimizer)
+            print('Report:', report)
+            print(tr_losses, eval_losses)
+from sklearn.metrics import f1_score
 
 def train_lm(model, parameters, optimizer):
     losses_train = []
     losses_eval = []
-    best_loss = math.inf
-    patience = 3
+    f1_scores = []
 
     for i in tqdm(range(0,parameters['n_splits'])):
 
@@ -74,22 +72,14 @@ def train_lm(model, parameters, optimizer):
         else:
             train_loader, dev_loader = parameters['mr_train_folds'][i]
 
+        print('Trainloader:', i, 'train 1:', train_loader)
         tr_loss = train_loop(train_loader, optimizer, model, parameters)
 
         losses_train.append(tr_loss)
 
-        if i % 5 == 0:
-
-            eval_loss, report = eval_loop(dev_loader, model, parameters)
-            losses_eval.append(eval_loss)
-
-            if eval_loss < best_loss:
-                best_loss = eval_loss
-                patience = 3
-            else:
-                patience -= 1
-            if patience <= 0: # Early stopping with patience
-                break # Not nice but it keeps the code clean
+        eval_loss, report = eval_loop(dev_loader, model, parameters)
+        losses_eval.append(eval_loss)
+        f1_scores.append(report['macro avg']['f1-score'])
 
     if parameters['model'] == 'SUBJ':
         eval_loss, report = eval_loop(parameters['subj_test_loader'], model, parameters)
@@ -97,7 +87,7 @@ def train_lm(model, parameters, optimizer):
         eval_loss, report = eval_loop(parameters['mr_test_loader'], model, parameters)
 
     losses_eval.append(eval_loss)
-
+    print('Fscore:', np.mean(f1_scores))
     return report, losses_train, losses_eval
 
 def train_loop(data_loader, optimizer, model, parameters):
@@ -105,27 +95,16 @@ def train_loop(data_loader, optimizer, model, parameters):
     losses = []
 
     for sample in data_loader:
-        texts, labels, lengths = sample['text'], sample['labels'], sample['lengths']
-        print('TRAINLOOP:',sample['text'].shape, sample['labels'].shape, sample['lengths'].shape)
-
-        # Assicurati che le dimensioni di labels siano corrette.
-        # labels deve essere un vettore 1D con il valore di classe per ciascun elemento nel batch.
 
         optimizer.zero_grad()
-        
-        # Assicurati che le dimensioni di output siano corrette.
-        # output deve essere di forma (batch_size, num_classes)
-        output = model(texts, lengths)
+        output = model(sample['text'], sample['lengths'])
 
-        print('MODELOUTPUSHAPE:', output.shape)
-        
-        # Calcola la loss
-        loss = parameters['criterion'](output, labels)
+        #print('MODELOUTPUSHAPE:', output.shape)
+        loss = parameters['criterion'](output, sample['labels'])
         losses.append(loss.item())
 
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
-
         optimizer.step()
 
     return np.mean(losses)
@@ -137,18 +116,30 @@ def eval_loop(data_loader, model, parameters):
     losses = []
 
     with torch.no_grad():
+        first_eval = True
         for sample in data_loader:
-            texts, labels, lengths = sample['text'], sample['labels'], sample['lengths']
-            outputs = model(texts, lengths)            
-            loss = parameters['criterion'](outputs, labels)
+            outputs = model(sample['text'], sample['lengths'])    
+            print('outputshape', outputs.shape)        
+            loss = parameters['criterion'](outputs, sample['labels'])
 
             losses.append(loss.item())
 
-            _, preds = torch.max(outputs, 1)
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
 
-    report = classification_report(all_labels, all_preds, target_names=['Objective', 'Subjective'])
+            _, preds = torch.max(outputs, 1)
+            
+            if first_eval:
+                print('preds', preds)
+                print('labels', sample['labels'])
+                print('preds', preds.cpu())
+                print('labels', sample['labels'].cpu())
+                print('preds', preds.cpu().numpy())
+                print('labels', sample['labels'].cpu().numpy())
+                first_eval = False
+
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(sample['labels'].cpu().numpy())
+
+    report = classification_report(all_labels, all_preds, zero_division=False, output_dict=True)
 
     return np.mean(losses), report
 
