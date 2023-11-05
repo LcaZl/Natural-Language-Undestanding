@@ -1,0 +1,9 @@
+click==8.1.7
+colorama==0.4.6
+importlib-metadata==3.10.1
+joblib==1.3.2
+nltk==3.8.1
+pcfg==0.1.5
+regex==2023.8.8
+tqdm==4.66.1
+zipp==3.17.0
