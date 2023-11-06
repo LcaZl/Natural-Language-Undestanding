@@ -44,13 +44,11 @@ if __name__ == "__main__":
 
     print('Datasets loaded.\n')
 
-    grid_parameters = {
-        'hidden_layer_size': [128, 256, 512],
-        'embedding_layer_size': [128, 256, 512],
-        'dropout': [0.1, 0.2, 0.3, 0.4, 0.5],
-        'learning_rate': [0.01, 0.001, 0.0001],
+    grid_search_parameters = {
+        'hidden_layer_size': [200, 250, 300, 250],
+        'embedding_layer_size': [200, 250, 300, 250],
+        'learning_rate': [0.001, 0.0005, 0.0001],
         'bidirectional': [True, False],
-        'optimizer': ['SGD', 'Adam']
     }
 
     training_baseline = {
@@ -59,21 +57,19 @@ if __name__ == "__main__":
             'output_size':1,
             'criterion': nn.BCEWithLogitsLoss(),
             'optimizer':'Adam',
-            'learning_rate': 5e-5,
-            'hidden_layer_size':400,
-            'embedding_layer_size' : 400,
             'dropout': 0.10,
-            'bidirectional':False,
             'grid_search':True,
-            'grid_search_parameters': grid_parameters
-
+            'grid_search_parameters': grid_search_parameters
     }
 
     training_parameters = {
         'Subj_model':{
             **training_baseline,
             'task':'subjectivity_detection',
-            'bidirectional':False,
+            'learning_rate': 0.001,
+            'hidden_layer_size':250,
+            'embedding_layer_size' : 300,
+            'bidirectional':True,            
             'vocab_size': subj_lang.vocab_size,
             'train_folds':subj_fold_dataset,
             'test_loader':subj_test,
@@ -82,6 +78,10 @@ if __name__ == "__main__":
         'polarity_model':{
             **training_baseline,
             'task':'polarity_detection',
+            'learning_rate': 5e-5,
+            'hidden_layer_size':400,
+            'embedding_layer_size' : 400,
+            'bidirectional':False,
             'vocab_size': mr_lang.vocab_size,
             'train_folds':mr_fold_dataset,
             'test_loader':mr_test,
@@ -103,10 +103,15 @@ if __name__ == "__main__":
     training_parameters['polarity_model_no_obj'] = {
         **training_baseline,
         'task':'polarity_detection_with_filtered_dataset',
+        'learning_rate': 5e-5,
+        'hidden_layer_size':400,
+        'embedding_layer_size' : 400,
+        'bidirectional':False,
         'vocab_size': mr2_lang.vocab_size,
         'train_folds':mr2_fold_dataset,
         'test_loader':mr2_test,
         'lang':mr2_lang, 
+
     }
     
     pol2_model, pol2_training_report = train_model(training_parameters['polarity_model_no_obj'])

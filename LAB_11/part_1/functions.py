@@ -81,20 +81,22 @@ def grid_search(parameters):
         
         average_f1 = np.mean([report[1] for report in reports])
         average_acc = np.mean([report[2] for report in reports])
+        score = average_acc + average_f1
 
-        print(f'- Average - Score F1: {best_score} - Accuracy: {average_acc}')
+        print(f'- Average - Score F1: {average_f1} - Accuracy: {average_acc}')
         print(f'- Best model performance -  Score F1: {b_model[1][1]} - Accuracy: {b_model[1][2]}\n')
         
-        if average_f1 > best_score:
+        if score > best_score:
             best_model_reports = reports
             best_params = combined_parameters
             best_model = b_model 
             best_losses = losses
+            best_score = score
 
     print('\nEnd grid search:')
     print(f' - Best parameters: ',{key: combined_parameters[key] for key in best_params.keys() if key in best_params['grid_search_parameters'].keys()},'\n')
 
-    return best_model, best_model_reports, best_losses
+    return best_model, best_model_reports, best_losses, best_params
 
 def init_weights(m):
     if isinstance(m, nn.RNN):
@@ -129,13 +131,13 @@ def train_model(parameters):
     model_filename = f"models/{parameters['task']}_model.pth"
 
     if os.path.exists(model_filename):
-        print(f'Model founded. Loading from file ...')
         saved_data = torch.load(model_filename)
+        print(f'Model founded. Parameters:', saved_data['parameters'])
         model, _ = init_model(parameters, saved_data['model_state'])
         reports = [saved_data['report']]
     else:
         if parameters['grid_search']:
-            best_model, reports, losses = grid_search(parameters)
+            best_model, reports, losses, best_params = grid_search(parameters)
         else:
             best_model, reports, losses = train_lm(parameters)
            
@@ -149,7 +151,8 @@ def train_model(parameters):
         if (parameters['task'] != 'polarity_detection_with_filtered_dataset'):
             data_to_save = {
                 'model_state': model.state_dict(),
-                'report': best_model[1]
+                'report': best_model[1],
+                'parameters':best_params
             }
             torch.save(data_to_save, model_filename)
 
