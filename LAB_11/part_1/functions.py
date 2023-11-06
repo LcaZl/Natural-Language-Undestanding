@@ -8,106 +8,233 @@ import numpy as np
 import math
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import classification_report
-
+from tabulate import tabulate
+import torch.nn.init as init
 from utils import *
 from model import *
 
+REMOVE_CLASS = 'obj'
 
-def init_weights(model):
-    for m in model.modules():
-        if isinstance(m, nn.RNN):
-            nn.init.xavier_uniform_(m.weight_ih_l0)
-            nn.init.orthogonal_(m.weight_hh_l0)
-            if m.bias:
-                nn.init.zeros_(m.bias_ih_l0)
-                nn.init.zeros_(m.bias_hh_l0)
-        elif isinstance(m, nn.Linear):
-            nn.init.uniform_(m.weight, -0.01, 0.01)
-            nn.init.zeros_(m.bias)
 
-def execute_experiments(experiments_parameters):
+def batch_validate_samples(model, texts, lengths, labels, lang, subj_lang):
+    # Questa funzione si aspetta che texts, lengths, labels siano batch
 
-    cols = []
-    scores = pd.DataFrame(columns = cols)
+    outputs = model(texts, lengths)
+    predictions = torch.round(torch.sigmoid(outputs))
+    subjective_mask = predictions.view(-1) == 1
 
-    for exp_id, parameters in experiments_parameters.items():
-        print(f'\n-------- {exp_id} --------\n')
-        print('Parameters:\n')
-        for key, value in parameters.items():
-            if not key in ['movie_review_train', 'movie_review_test', 'subj_train','subj_test']:
-                print(f' - {key}: {value}')
+    new_raw_elements = []
+    for i in range(texts.size(0)):
+        if subj_lang.id2class[subjective_mask.tolist()[i]] != REMOVE_CLASS:
 
-        print(f'\nStart Training:')
-        model_filename = f"models_weight/{exp_id}.pth"
+            decoded_text = lang.decode(texts[i].tolist())[:lengths[i].item()]
+            new_raw_elem = (decoded_text, lang.id2class[labels[i].item()])
+            new_raw_elements.append(new_raw_elem)
 
-        if os.path.exists(model_filename):
-            pass
-        else:
-            model = SUBJ_Model(
-                hidden_size=parameters['hidden_layer_size'],
-                embedding_size=parameters['embedding_layer_size'],
-                output_size=parameters['output_size'],
-                vocab_size=parameters['subj_vocab_size'],
-                dropout=parameters['dropout'],
-                bidirectional=parameters['bidirectional'],                    
-            ).to(DEVICE)
-            model.apply(init_weights)
+    return new_raw_elements
 
-            optimizer = optim.Adam(model.parameters(), lr = parameters['learning_rate'])
-            parameters['model'] = 'SUBJ'
-            report, tr_losses, eval_losses = train_lm(model, parameters, optimizer)
-            print('Report:', report)
-            print(tr_losses, eval_losses)
-from sklearn.metrics import f1_score
+def filter_subjective_sentences(dataset, test_loader, model, lang, subj_lang):
+    model.to(DEVICE)
+    model.eval()
+    new_corpus = []
+    
+    with torch.no_grad():
+        train_loader, dev_loader = dataset[0]
+        
+        # Filtrare il train set
+        for sample in train_loader:
+            new_raw_elements = batch_validate_samples(model, sample['text'], sample['lengths'], sample['labels'], lang, subj_lang)
+            new_corpus.extend(new_raw_elements)
+            
+        # Filtrare il dev set
+        for sample in dev_loader:
+            new_raw_elements = batch_validate_samples(model, sample['text'], sample['lengths'], sample['labels'], lang, subj_lang)
+            new_corpus.extend(new_raw_elements)
+            
 
-def train_lm(model, parameters, optimizer):
-    losses_train = []
-    losses_eval = []
-    f1_scores = []
+        for sample in test_loader:
+            new_raw_elements = batch_validate_samples(model, sample['text'], sample['lengths'], sample['labels'], lang, subj_lang)
+            new_corpus.extend(new_raw_elements)    # Creare il nuovo oggetto Lang qui se necessario usando new_corpus
+    
+    return new_corpus
 
-    for i in tqdm(range(0,parameters['n_splits'])):
+from itertools import product
+def grid_search(parameters):
 
-        if parameters['model'] == 'SUBJ':
-            train_loader, dev_loader = parameters['subj_train_folds'][i]
-        else:
-            train_loader, dev_loader = parameters['mr_train_folds'][i]
+    print('Starting grid search for:', parameters['grid_search_parameters'].keys(), '\n')
+    grid = list(product(*parameters['grid_search_parameters'].values()))
+    def to_parameter_dict(keys, values):
+        return {key: value for key, value in zip(keys, values)}
 
-        print('Trainloader:', i, 'train 1:', train_loader)
-        tr_loss = train_loop(train_loader, optimizer, model, parameters)
+    best_score = 0
+    best_params = None
+    best_model = None
+    best_losses = None
+    best_model_reports = None
 
-        losses_train.append(tr_loss)
+    for params_tuple in grid:
+        combined_parameters = {**parameters, **to_parameter_dict(parameters['grid_search_parameters'].keys(), params_tuple)}
 
-        eval_loss, report = eval_loop(dev_loader, model, parameters)
-        losses_eval.append(eval_loss)
-        f1_scores.append(report['macro avg']['f1-score'])
+        print('- Current parameters:',{key: combined_parameters[key] for key in combined_parameters.keys() if key in combined_parameters['grid_search_parameters'].keys()})
 
-    if parameters['model'] == 'SUBJ':
-        eval_loss, report = eval_loop(parameters['subj_test_loader'], model, parameters)
+        b_model, reports, losses = train_lm(combined_parameters)
+        
+        average_f1 = np.mean([report[1] for report in reports])
+        average_acc = np.mean([report[2] for report in reports])
+
+        print(f'- Average - Score F1: {best_score} - Accuracy: {average_acc}')
+        print(f'- Best model performance -  Score F1: {b_model[1][1]} - Accuracy: {b_model[1][2]}\n')
+        
+        if average_f1 > best_score:
+            best_model_reports = reports
+            best_params = combined_parameters
+            best_model = b_model 
+            best_losses = losses
+
+    print('\nEnd grid search:')
+    print(f' - Best parameters: ',{key: combined_parameters[key] for key in best_params.keys() if key in best_params['grid_search_parameters'].keys()},'\n')
+
+    return best_model, best_model_reports, best_losses
+
+def init_weights(m):
+    if isinstance(m, nn.RNN):
+        # Initialize the RNN layers
+        for name, param in m.named_parameters():
+            if 'weight_ih' in name:
+                # Xavier initialization for input to hidden weights
+                init.xavier_uniform_(param.data)
+            elif 'weight_hh' in name:
+                # Orthogonal initialization for hidden to hidden weights
+                init.orthogonal_(param.data)
+            elif 'bias' in name:
+                # Zero initialization for biases
+                init.zeros_(param.data)
+    elif isinstance(m, nn.Linear):
+        # Kaiming initialization for the linear layers
+        init.kaiming_uniform_(m.weight, nonlinearity='relu')
+        if m.bias is not None:
+            # Zero initialization for the linear layer biases
+            init.zeros_(m.bias)
+
+def train_model(parameters):
+
+    print(f'\nStart Training:')
+    print(f'\n-------- ',parameters['task'],' --------\n')
+    print('Parameters:\n')
+    for key, value in parameters.items():
+        if not key in ['train_folds', 'test_loader']:
+            print(f' - {key}: {value}')
+    print('\n')
+
+    model_filename = f"models/{parameters['task']}_model.pth"
+
+    if os.path.exists(model_filename):
+        print(f'Model founded. Loading from file ...')
+        saved_data = torch.load(model_filename)
+        model, _ = init_model(parameters, saved_data['model_state'])
+        reports = [saved_data['report']]
     else:
-        eval_loss, report = eval_loop(parameters['mr_test_loader'], model, parameters)
+        if parameters['grid_search']:
+            best_model, reports, losses = grid_search(parameters)
+        else:
+            best_model, reports, losses = train_lm(parameters)
+           
+        model = best_model[0]
 
-    losses_eval.append(eval_loss)
-    print('Fscore:', np.mean(f1_scores))
-    return report, losses_train, losses_eval
+        # Print losses
+        for fold, losses in losses.items():
+            print(f'Loss for {fold}:{losses}')
+
+        # Save model and scores
+        if (parameters['task'] != 'polarity_detection_with_filtered_dataset'):
+            data_to_save = {
+                'model_state': model.state_dict(),
+                'report': best_model[1]
+            }
+            torch.save(data_to_save, model_filename)
+
+    cols = ['Fold', 'F1-score', 'Accuracy']
+    training_report = pd.DataFrame(list(reports), columns=cols).set_index('Fold')
+
+    return model, training_report
+
+def init_model(parameters, model_state = None):
+
+    model = SUBJ_Model(
+        hidden_size=parameters['hidden_layer_size'],
+        embedding_size=parameters['embedding_layer_size'],
+        output_size=parameters['output_size'],
+        vocab_size=parameters['vocab_size'],
+        dropout=parameters['dropout'],
+        bidirectional=parameters['bidirectional'],                    
+    ).to(DEVICE)
+    if model_state:
+        model.load_state_dict(model_state)
+    else:
+        model.apply(init_weights)
+
+    if parameters['optimizer'] == 'SGD':
+        optimizer = optim.SGD(model.parameters(), 
+                    lr=parameters['learning_rate'])
+    elif parameters['optimizer'] == 'Adam':
+        optimizer = optim.AdamW(model.parameters(), 
+                            lr=parameters['learning_rate'])
+
+    return model, optimizer
+
+
+def train_lm(parameters):
+    losses = {}
+    reports = []
+    best_score = 0
+
+    pbar = tqdm(range(0,parameters['n_splits']))
+    for i in pbar:
+        loss_idx = f'Fold_{i}'
+        losses[loss_idx] = []
+        model, optimizer = init_model(parameters)
+
+        train_loader, dev_loader = parameters['train_folds'][i]
+
+        loss = train_loop(train_loader, optimizer, model, parameters)
+        losses[loss_idx].append(loss)
+
+        loss, report = eval_loop(dev_loader, model, parameters)
+        losses[loss_idx].append(loss)
+
+        loss, report = eval_loop(parameters['test_loader'], model, parameters)
+        losses[loss_idx].append(loss)
+
+        f = round(report['macro avg']['f1-score'], 3)
+        acc = round(report['accuracy'], 3)
+        reports.append([i, f, acc])
+
+        if ((f+acc)/2) > best_score:
+            best_score = (f+acc)/2
+            best_model = (model, [i, f, acc])
+        
+        pbar.set_description(f'FOLD {i+1} - F1:{f} - A: {acc}')
+    
+    return best_model, reports, losses
 
 def train_loop(data_loader, optimizer, model, parameters):
     model.train()
     losses = []
 
     for sample in data_loader:
-
         optimizer.zero_grad()
         output = model(sample['text'], sample['lengths'])
+        output = output.squeeze()
 
-        #print('MODELOUTPUSHAPE:', output.shape)
-        loss = parameters['criterion'](output, sample['labels'])
+        loss = parameters['criterion'](output, sample['labels'].float())
         losses.append(loss.item())
 
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
         optimizer.step()
 
-    return np.mean(losses)
+    return round(np.mean(losses),3)
+
 
 def eval_loop(data_loader, model, parameters):
     model.eval()
@@ -119,27 +246,27 @@ def eval_loop(data_loader, model, parameters):
         first_eval = True
         for sample in data_loader:
             outputs = model(sample['text'], sample['lengths'])    
-            print('outputshape', outputs.shape)        
-            loss = parameters['criterion'](outputs, sample['labels'])
+            outputs = outputs.squeeze()  # Riduce la dimensione dell'output a [batch_size]
+
+            loss = parameters['criterion'](outputs, sample['labels'].float())
 
             losses.append(loss.item())
-
-
-            _, preds = torch.max(outputs, 1)
             
+            #print('Outputs:',outputs)
+            probs = torch.sigmoid(outputs)
+            #print(probs)
+            preds = (probs > 0.5).long() 
             if first_eval:
-                print('preds', preds)
-                print('labels', sample['labels'])
-                print('preds', preds.cpu())
-                print('labels', sample['labels'].cpu())
-                print('preds', preds.cpu().numpy())
-                print('labels', sample['labels'].cpu().numpy())
+                #print('preds', preds)
+                #print('labels', sample['labels'])
+                #print('preds', preds.cpu())
+                #print('labels', sample['labels'].cpu())
+                #print('preds', preds.cpu().numpy())
+                #print('labels', sample['labels'].cpu().numpy())
                 first_eval = False
-
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(sample['labels'].cpu().numpy())
-
     report = classification_report(all_labels, all_preds, zero_division=False, output_dict=True)
 
-    return np.mean(losses), report
+    return round(np.mean(losses), 3), report
 

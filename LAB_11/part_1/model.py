@@ -38,9 +38,9 @@ class SUBJ_Model(nn.Module):
         # Utilizziamo la concatenazione degli stati nascosti forward e backward per RNN bidirezionali
         # o semplicemente l'ultimo stato nascosto per RNN unidirezionali
         if self.rnn.bidirectional:
-            hidden = self.dropout(torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim=1))
+            hidden = torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim=1)
         else:
-            hidden = self.dropout(hidden[-1,:,:])
+            hidden = hidden[-1,:,:]
 
         # hidden => [batch size, hid dim]
         return self.fc(hidden)  # [batch size, output dim]

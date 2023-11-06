@@ -23,26 +23,36 @@ from nltk.stem import WordNetLemmatizer
 PAD_TOKEN = 0
 UNK_TOKEN = 1
 DEVICE = 'cuda:0'
-INFO_ENABLED = True
+INFO_ENABLED = False
+MAX_VOCAB_SIZE = 10000
 
-def load_dataset(dataset_name, kfold, vocab_size=10000, test_size = 0.1):
-    print(f'\nLoading Dataset {dataset_name}...')
+def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
+    print(f'Loading Dataset {dataset_name}...')
 
-    
     if dataset_name == 'Subjectivity':
+
     # Load subjectivity dataset and preprocess texts
         print(' - Categories:', subjectivity.categories())
         grp1_sentences = [(preprocess(' '.join(sent)), 'subj') for sent in subjectivity.sents(categories='subj')] # (Lista token, label)
         grp2_sentences = [(preprocess(' '.join(sent)), 'obj') for sent in subjectivity.sents(categories='obj')]
         categories = subjectivity.categories()
+
     elif dataset_name == 'Movie_reviews':
+
         mr = movie_reviews
+        categories = mr.categories()
+
         print(' - Categories:', mr.categories())
         grp1_sentences = [(preprocess(' '.join([' '.join(sublist) for sublist in para]), mark_neg=True), 'neg') for para in mr.paras(categories='neg')]
         grp2_sentences = [(preprocess(' '.join([' '.join(sublist) for sublist in para])), 'pos') for para in mr.paras(categories='pos')]
+
+    elif dataset_name == 'Filtered_movie_reviews':
+        mr = movie_reviews
         categories = mr.categories()
+        grp1_sentences = [(el, label) for el, label in args[0] if label == 'neg']
+        grp2_sentences = [(el, label) for el, label in args[0] if label == 'pos']
     else:
-        raise Exception('Dataset name not recognized')
+        raise Exception('Dataset name not recognized.')
     
     all_sentences = grp1_sentences + grp2_sentences
 
@@ -50,21 +60,25 @@ def load_dataset(dataset_name, kfold, vocab_size=10000, test_size = 0.1):
     train_sentences, test_sentences = train_test_split(all_sentences, test_size=test_size, random_state=42, shuffle = True)
 
     # Build vocabulary
-    lang = Lang(train_sentences, categories, vocab_size)
+    lang = Lang(train_sentences, categories)
+
 
     train_labels = [label for _, label in train_sentences]
     fold_datasets = []  # This will store the dataset splits
-    for train_indices, val_indices in kfold.split(train_sentences, train_labels):
+    for k, (train_indices, val_indices) in enumerate(kfold.split(train_sentences, train_labels)):
         # Split the data into training and validation sets for the current fold
         train_samples = [train_sentences[i] for i in train_indices]
         val_samples = [train_sentences[i] for i in val_indices]
+
+        print(f' - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
 
         # Create Dataset instances
         train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
 
-        train_loader = DataLoader(train_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
-        val_loader = DataLoader(val_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
+        train_loader = DataLoader(train_dataset, batch_size = 100, shuffle = True, collate_fn = collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size = 100, shuffle = True, collate_fn = collate_fn)
+        
         # Store the datasets
         fold_datasets.append((train_loader, val_loader))
 
@@ -72,24 +86,25 @@ def load_dataset(dataset_name, kfold, vocab_size=10000, test_size = 0.1):
     test_loader = DataLoader(test_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
 
     # Subjectivity dataset
-    print(' - All sentences:', all_sentences[:3])
+    #print(' - All sentences:', all_sentences[:3])
     print(' - Vocabulary size:', lang.vocab_size)
-    print(' - Group 1 sents:', len(subjectivity.sents(categories='subj')))
-    print(' - Group 2 sents:', len(subjectivity.sents(categories='obj')))
-    print(' - Dataset sent:', subjectivity.sents(categories='subj')[0])
+    print(' - Group ',grp1_sentences[0][1],' - First sent len:', len(grp1_sentences[0][0]), )
+    print(' - Group ',grp2_sentences[0][1],' - First sent len:', len(grp2_sentences[0][0]), )
+    print(f'{dataset_name} folds (', len(fold_datasets), '):')
+    for k, fold in enumerate(fold_datasets):
+        print('- Fold',k,' dim -> Train:',len(fold[0]), 'Dev:', len(fold[1]))
     print('Datasets loaded!\n')
-
     return fold_datasets, test_loader, lang
 
 class Lang:
-    def __init__(self, text, classes, vocab_size):
-        self.word2id = self.mapping_seq([el for el, _ in text], vocab_size=vocab_size, special_token = True)
+    def __init__(self, text, classes):
+        self.word2id = self.mapping_seq([el for el, _ in text], special_token = True)
         self.vocab_size = len(self.word2id)
         self.id2word = {id: word for word, id in self.word2id.items()}
         self.class2id = {}
         for i, cls in enumerate(classes):
             self.class2id[cls] = i
-
+        self.id2class = {i:c for c, i in self.class2id.items()}
         print(' - Classes Ids:',self.class2id)
 
     def encode(self, sentence):
@@ -98,9 +113,9 @@ class Lang:
     def decode(self, sentence_ids):
         return [self.id2word[id] for id in sentence_ids]
     
-    def mapping_seq(self, sentences, vocab_size, special_token = False):
+    def mapping_seq(self, sentences, special_token = False):
         word_counts = Counter(word for sent in sentences for word in sent)
-        most_common_words = word_counts.most_common(vocab_size)
+        most_common_words = word_counts.most_common(MAX_VOCAB_SIZE - 2 if special_token else MAX_VOCAB_SIZE)
         vocab = {}
 
         if special_token:
@@ -177,8 +192,6 @@ def collate_fn(batch):
 
         padded_seqs = padded_seqs.detach()  # We remove these tensors from the computational graph
         return padded_seqs, lengths
-
-    batch.sort(key=lambda x: len(x['text']), reverse=True)
 
     new_item = {}
     for key in batch[0].keys():
