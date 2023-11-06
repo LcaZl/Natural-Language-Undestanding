@@ -45,12 +45,12 @@ if __name__ == "__main__":
     print('Datasets loaded.\n')
 
     grid_parameters = {
-        'hidden_layer_size': [128],
-        'embedding_layer_size': [128],
-        'dropout': [0.1, 0.2],
-        'learning_rate': [0.01],
-        'bidirectional': [True],
-        'optimizer': ['SGD']
+        'hidden_layer_size': [128, 256, 512],
+        'embedding_layer_size': [128, 256, 512],
+        'dropout': [0.1, 0.2, 0.3, 0.4, 0.5],
+        'learning_rate': [0.01, 0.001, 0.0001],
+        'bidirectional': [True, False],
+        'optimizer': ['SGD', 'Adam']
     }
 
     training_baseline = {
