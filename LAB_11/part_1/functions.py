@@ -72,10 +72,10 @@ def grid_search(parameters):
     best_losses = None
     best_model_reports = None
 
-    for params_tuple in grid:
+    for i, params_tuple in enumerate(grid):
         combined_parameters = {**parameters, **to_parameter_dict(parameters['grid_search_parameters'].keys(), params_tuple)}
 
-        print('- Current parameters:',{key: combined_parameters[key] for key in combined_parameters.keys() if key in combined_parameters['grid_search_parameters'].keys()})
+        print(f'({i+1}/{len(grid)})- Current parameters:',{key: combined_parameters[key] for key in combined_parameters.keys() if key in combined_parameters['grid_search_parameters'].keys()})
 
         b_model, reports, losses = train_lm(combined_parameters)
         
