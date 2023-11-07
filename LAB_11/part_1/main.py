@@ -33,21 +33,22 @@ if __name__ == "__main__":
     #Wrtite the code to load the datasets and to run your functions
     # Print the results
 
-    vocab_size = 10000
-    test_size = 0.2 # Train, dev, test
+    vocab_size = 12000
+    test_size = 0.1 # Train, dev, test
     skf = StratifiedKFold(n_splits=10, random_state=42, shuffle = True)
 
     print('Loading datasets ...\n')
 
     subj_fold_dataset, subj_test, subj_lang = load_dataset('Subjectivity', skf, test_size)
+
     mr_fold_dataset, mr_test, mr_lang = load_dataset('Movie_reviews', skf, test_size)
 
     print('Datasets loaded.\n')
 
     grid_search_parameters = {
-        'hidden_layer_size': [200, 250, 300, 250],
-        'embedding_layer_size': [200, 250, 300, 250],
-        'learning_rate': [0.001, 0.0005, 0.0001],
+        'hidden_layer_size': [250, 300, 350],
+        'embedding_layer_size': [250, 300, 350],
+        'learning_rate': [0.002, 0.001, 0.0005, 0.0001],
         'bidirectional': [True, False],
     }
 

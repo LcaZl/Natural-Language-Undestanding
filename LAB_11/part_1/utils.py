@@ -11,13 +11,16 @@ import torch.utils.data as data
 from sklearn.model_selection import KFold
 # Assure that we have the necessary data downloaded
 nltk.download('subjectivity')
+from nltk.corpus import subjectivity
+import numpy as np
 nltk.download('stopwords')
 nltk.download('punkt')
 nltk.download('movie_reviews')
-from nltk.corpus import subjectivity
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
+from nltk.sentiment.vader import SentimentIntensityAnalyzer, VaderConstants
+vlex = VaderConstants()
 
 # Parameters
 PAD_TOKEN = 0
@@ -25,6 +28,19 @@ UNK_TOKEN = 1
 DEVICE = 'cuda:0'
 INFO_ENABLED = False
 MAX_VOCAB_SIZE = 10000
+
+def preprocess(text, mark_neg = False):
+    stop_words = set(stopwords.words('english'))
+    lemmatizer = WordNetLemmatizer()
+    
+    tokens = word_tokenize(text)
+    tokens = [word.lower() for word in tokens if word.isalpha()]
+    tokens = [word for word in tokens if word not in stop_words]
+    #tokens = [lemmatizer.lemmatize(word) for word in tokens]
+    if mark_neg:
+        tokens = mark_negation(tokens)
+
+    return tokens
 
 def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
     print(f'Loading Dataset {dataset_name}...')
@@ -61,7 +77,6 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
     # Build vocabulary
     lang = Lang(train_sentences, categories)
-
 
     train_labels = [label for _, label in train_sentences]
     fold_datasets = []  # This will store the dataset splits
@@ -155,18 +170,7 @@ class Dataset(data.Dataset):
         return {'text':tensor_sentence, 'label':tensor_label}
     
 # Preprocessing function
-def preprocess(text, mark_neg = False):
-    stop_words = set(stopwords.words('english'))
-    lemmatizer = WordNetLemmatizer()
-    
-    tokens = word_tokenize(text)
-    tokens = [word.lower() for word in tokens if word.isalpha()]
-    tokens = [word for word in tokens if word not in stop_words]
-    tokens = [lemmatizer.lemmatize(word) for word in tokens]
-    if mark_neg:
-        tokens = mark_negation(tokens)
 
-    return tokens
     
 
 def collate_fn(batch):
