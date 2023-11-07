@@ -5,18 +5,22 @@ from nltk.corpus import wordnet
 from nltk import pos_tag
 from nltk.corpus import sentiwordnet as swn
 from nltk.sentiment.util import mark_negation
-from sklearn.model_selection import StratifiedKFold
-
+from sklearn.model_selection import KFold
+from nltk.sentiment import SentimentIntensityAnalyzer
+import torch.utils.data as data
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+nltk.download('vader_lexicon')
 nltk.download('sentiwordnet')
+import torch
+sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
 DEVICE = 'cuda:0'
-INFO_ENABLED = False
-MAX_VOCAB_SIZE = 10000
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
-pos2wn = {"NOUN": "n", "VERB": "v", "ADJ": "a", "ADV": "r"}
+INFO_ENABLED = True
 
 def read_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -34,168 +38,172 @@ def process_raw_data(dataset):
             words_tagged = words_tagged.split()
             tags = [w.split('=')[1] for w in words_tagged]
             words = [w.split('=')[0] for w in words_tagged]
-            score = score_swn([words])
+            score = sia.polarity_scores(' '.join(words))['compound']
 
             assert len(words) == len(tags)
 
-            new_dataset.append({'words':words, 'tags':tags, 'score':score})
+            new_dataset.append((words, score, tags))
 
     return new_dataset
 
 def load_dataset():
-    print(f'Loading Dataset Laptop 14...')
+    print(f'\nLoading Dataset Laptop 14...')
 
     train_raw = read_file(TRAIN_PATH)
     test_raw = read_file(TEST_PATH)
 
     train_set = process_raw_data(train_raw)
     test_set = process_raw_data(test_raw)
-    print(' - Training sents:', len(train_raw))
-    print(' - Test sents:', len(test_raw))
+
+    sents = [el[0] for el in train_set]
+    labels = [el[2] for el in train_set]
+    scores = [el[1] for el in train_set]
+
+    print(train_set[0])
+    lang = Lang(sents, labels)
+
+    skf = KFold(n_splits=10, random_state=42, shuffle = True)
+
+    fold_datasets = []  # This will store the dataset splits
+
+    for k, (train_indices, val_indices) in enumerate(skf.split(train_set)):
+
+        train_samples = [train_set[idx] for idx in train_indices]
+        val_samples = [train_set[idx] for idx in val_indices]
+
+        train_dataset = Dataset(train_samples, lang)
+        val_dataset = Dataset(val_samples, lang)
+
+        train_loader = DataLoader(train_dataset, batch_size = 100, shuffle = True, collate_fn = collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size = 100, shuffle = True, collate_fn = collate_fn)
+        
+        fold_datasets.append((train_loader, val_loader))
+        print(f' - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
+
+    test_dataset = Dataset(test_set, lang)
+    test_loader = DataLoader(test_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
+
     print(' - Raw sent:', train_raw[0])
-    print(f' - Training len:', len(train_set))
-    print(f' - Train sample:', train_set[0])
-    print(f' - Test len:', len(test_set))
-    print(f' - Test sample:', test_set[1])
-
-    sents = [el['words'] for el in train_set]
-    lang = Lang(sents)
-
-    print(' - Sent words:', train_set[0]['words'])
-    print(' - Sent encod:', lang.encode(train_set[0]['words']))
-    print(' - Sent words:', lang.decode(lang.encode(train_set[0]['words'])))
-
-    skf = StratifiedKFold(n_splits=10, random_state=42, shuffle = True)
-
-    def integrate_scores_with_dataset(dataset):
-        for sample in dataset:
-            sample['aspect_score'] = aggregate_aspect_scores(sample)
-    
-    integrate_scores_with_dataset(train_set)
-    integrate_scores_with_dataset(test_set)
-
     print(' - Training sents:', len(train_raw))
-    print(' - Test sents:', len(test_raw))
-    print(' - Raw sent:', train_raw[0])
     print(f' - Training len:', len(train_set))
-    print(f' - Train sample:', train_set[0])
+    print(' - Training dataset:', len(train_dataset))
+    print(' - Test sents:', len(test_raw))
     print(f' - Test len:', len(test_set))
-    print(f' - Test sample:', test_set[1])
+    print(' - Test dataset:', len(test_dataset))
+    print(f' - Training len:', len(train_set))
+
+    print(f' - Train sample:', train_set[0])
+    print(f' - Train dataset sample:', train_dataset[0])
+
+    print(f' - Test sample:', test_set[0])
+    print(f' - Test dataset sample:', test_dataset[0])
+    print('Dataset loaded.\n\n')
+    return fold_datasets, test_dataset, lang
     
 class Lang:
-    def __init__(self, sents):
+    def __init__(self, sents, labels):
         
         self.word2id = self.mapping_seq(sents, special_token = True)
         self.id2word = {id: word for word, id in self.word2id.items()}
-        self.vocab_size = len(self.word2id)
 
-    def encode(self, sentence):
+        self.label2id = self.mapping_seq(labels, special_token = False)
+        self.id2label = {id: label for label, id in self.label2id.items()}
+        self.vocab_size = len(self.word2id)
+        self.label_size = len(self.label2id)
+
+    def encode_sent(self, sentence):
         return [self.word2id.get(word, UNK_TOKEN) for word in sentence]
 
-    def decode(self, sentence_ids):
+    def decode_sent(self, sentence_ids):
         return [self.id2word[id] for id in sentence_ids]
     
-    def mapping_seq(self, sents, special_token = False):
+    def encode_labels(self, sentence):
+        return [self.label2id.get(word, UNK_TOKEN) for word in sentence]
+
+    def decode_labels(self, sentence_ids):
+        return [self.id2label[id] for id in sentence_ids]
+    
+    def mapping_seq(self, seqs, special_token = False):
         vocab = {}
 
+        vocab['<PAD>'] = PAD_TOKEN
+
         if special_token:
-            vocab['<PAD>'] = PAD_TOKEN
             vocab['<UNK>'] = UNK_TOKEN
 
 
-        for sent in sents:
-            for word in sent: 
-                if not vocab.get(word):
-                    vocab[word] = len(vocab)
+        for seq in seqs:
+            for tok in seq: 
+                if not vocab.get(tok):
+                    vocab[tok] = len(vocab)
 
         return vocab
     
-# lesk's filtering w.r.t. pos-tag makes distinction between 'a' & 's'; we do not
-# thus, let's modify the function
-def lesk(context_sentence, ambiguous_word, pos=None, synsets=None):
-    """Return a synset for an ambiguous word in a context.
+class Dataset(data.Dataset):
+    def __init__(self, samples, lang):
+        self.samples = samples
+        self.lang = lang
+        self.first = True
 
-    :param iter context_sentence: The context sentence where the ambiguous word
-         occurs, passed as an iterable of words.
-    :param str ambiguous_word: The ambiguous word that requires WSD.
-    :param str pos: A specified Part-of-Speech (POS).
-    :param iter synsets: Possible synsets of the ambiguous word.
-    :return: ``lesk_sense`` The Synset() object with the highest signature overlaps.
-    """
+    def __len__(self):
+        return len(self.samples)
 
-    context = set(context_sentence)
-    if synsets is None:
-        synsets = wordnet.synsets(ambiguous_word)
+    def __getitem__(self, idx):
+        sentence, score, labels = self.samples[idx]
+        encoded_sentence = self.lang.encode_sent(sentence)
+        encoded_labels = self.lang.encode_labels(labels)
 
-    if pos:
-        if pos == 'a':
-            synsets = [ss for ss in synsets if str(ss.pos()) in ['a', 's']]
-        else:
-            synsets = [ss for ss in synsets if str(ss.pos()) == pos]
+        tensor_sentence = torch.LongTensor(encoded_sentence)
+        tensor_labels = torch.LongTensor(encoded_labels)
 
-    if not synsets:
-        return None
+        if self.first and INFO_ENABLED:
+            print('- Sample')
+            print('-- Sentence:', sentence)
+            print('-- Encoded :', encoded_sentence)
+            print('-- Label:', labels)
+            print('-- Encoded:', encoded_labels)
+            print('-- Score:', score)
+            self.first = False
 
-    _, sense = max(
-        (len(context.intersection(ss.definition().split())), ss) for ss in synsets
-    )
 
-    return sense
-
-def aggregate_aspect_scores(sample):
-    # Aggrega gli score per ogni aspetto
-    aspect_scores = {'pos': [], 'neg': [], 'obj': []}
-    for word, tag, pos, neg, obj in zip(sample['words'], sample['tags'], sample['score']['pos'], sample['score']['neg'], sample['score']['obj']):
-        if 'T-' in tag:  # Se la parola è un aspetto
-            aspect_scores['pos'].append(pos)
-            aspect_scores['neg'].append(neg)
-            aspect_scores['obj'].append(obj)
+        return {'text':tensor_sentence, 'label':tensor_labels, 'score':score}
     
-    # Calcola la media degli score per aspetto
-    for key in aspect_scores:
-        if aspect_scores[key]:  # Evita la divisione per zero
-            aspect_scores[key] = sum(aspect_scores[key]) / len(aspect_scores[key])
-        else:
-            aspect_scores[key] = 0
-    
-    return aspect_scores
 
-def score_sent(sent, use_pos=False):
-    pos = []
-    neg = []
-    obj = []
-    if use_pos:
-        tagged_sent = pos_tag(sent, tagset='universal')
-    else:
-        tagged_sent = [(w, None) for w in sent]
+def collate_fn(batch):
 
-    for tok, tag in tagged_sent:
-        ss = lesk(sent, tok, pos=pos2wn.get(tag, None))
-        if ss:
-            sense = swn.senti_synset(ss.name())
-            pos.append(sense.pos_score())
-            neg.append(sense.neg_score())
-            obj.append(sense.obj_score())
-        else:
-            pos.append(0)
-            neg.append(0)
-            obj.append(1)
-    return pos, neg, obj
+    def merge(sequences):
+        '''
+        merge from batch * sent_len to batch * max_len 
+        '''
+        lengths = [len(seq) for seq in sequences]
+        for i,l in enumerate(lengths):
+            if l == 0:
+                print(sequences[i])
+                exit(0)
+        max_len = 1 if max(lengths)==0 else max(lengths)
 
-def score_swn(doc, use_pos=False):
-    pos = []
-    neg = []
-    obj = []
-    for sent in doc:
-        sent_pos, sent_neg, sent_obj = score_sent(sent, use_pos=use_pos)
-        #print(sent_pos, sent_neg, sent_obj)
-        pos.extend(sent_pos)
-        neg.extend(sent_neg)
-        obj.extend(sent_obj)
+        # Pad token is zero in our case
+        # So we create a matrix full of PAD_TOKEN (i.e. 0) with the shape 
+        # batch_size X maximum length of a sequence
+        padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(PAD_TOKEN)
+        for i, seq in enumerate(sequences):
+            end = lengths[i]
+            padded_seqs[i, :end] = seq # We copy each sequence into the matrix
 
-    scores = {
-        "pos": pos,
-        "neg": neg,
-        "obj": obj
-    }
-    return scores
+        padded_seqs = padded_seqs.detach()  # We remove these tensors from the computational graph
+        return padded_seqs, lengths
+
+    new_item = {}
+    for key in batch[0].keys():
+        new_item[key] = [el[key] for el in batch]
+
+    source, lengths = merge(new_item['text'])
+    labels, _ = merge(new_item['label'])
+
+    new_item['text'] = source.to(DEVICE)
+    new_item['labels'] = labels.to(DEVICE)
+    new_item['vader'] = torch.Tensor(new_item['score']).to(DEVICE)
+    new_item['lengths'] = torch.LongTensor(lengths).to(DEVICE)
+    #if INFO_ENABLED:
+        # print('COLLATEFN:',new_item['text'].shape, new_item['labels'].shape, new_item['lengths'].shape)
+    return new_item

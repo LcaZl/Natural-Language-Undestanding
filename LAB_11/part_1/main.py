@@ -46,10 +46,9 @@ if __name__ == "__main__":
     print('Datasets loaded.\n')
 
     grid_search_parameters = {
-        'hidden_layer_size': [250, 300, 350],
-        'embedding_layer_size': [250, 300, 350],
-        'learning_rate': [0.002, 0.001, 0.0005, 0.0001],
-        'bidirectional': [True, False],
+        'hidden_layer_size': [512, 576, 640, 708],
+        'embedding_layer_size': [512, 576, 640, 708],
+        'learning_rate': [0.001, 0.005, 0.0005, 0.00075],
     }
 
     training_baseline = {
@@ -67,9 +66,9 @@ if __name__ == "__main__":
         'Subj_model':{
             **training_baseline,
             'task':'subjectivity_detection',
-            'learning_rate': 0.001,
-            'hidden_layer_size':250,
-            'embedding_layer_size' : 300,
+            'learning_rate': 0.01,
+            'hidden_layer_size':256,
+            'embedding_layer_size' : 512,
             'bidirectional':True,            
             'vocab_size': subj_lang.vocab_size,
             'train_folds':subj_fold_dataset,

@@ -91,8 +91,8 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
         train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
 
-        train_loader = DataLoader(train_dataset, batch_size = 100, shuffle = True, collate_fn = collate_fn)
-        val_loader = DataLoader(val_dataset, batch_size = 100, shuffle = True, collate_fn = collate_fn)
+        train_loader = DataLoader(train_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
         
         # Store the datasets
         fold_datasets.append((train_loader, val_loader))
