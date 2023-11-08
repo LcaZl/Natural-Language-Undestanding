@@ -17,48 +17,30 @@ from model import *
 
 REMOVE_CLASS = 'obj'
 
-
-def batch_validate_samples(model, sample, lang, subj_lang):
-    # Questa funzione si aspetta che texts, lengths, labels siano batch
-
-    outputs = model(sample['text'], sample['lengths'])
-    predictions = torch.round(torch.sigmoid(outputs))
-    subjective_mask = predictions.view(-1) == 1
-
-    new_raw_elements = []
-    for i in range(sample['text'].size(0)):
-        if subj_lang.id2class[subjective_mask.tolist()[i]] != REMOVE_CLASS:
-
-            decoded_text = lang.decode(sample['text'][i].tolist())[:sample['lengths'][i].item()]
-            new_raw_elem = (decoded_text, lang.id2vlabel[sample['vlabes'][i].item()], lang.id2class[sample['labels'][i].item()])
-            new_raw_elements.append(new_raw_elem)
-
-    return new_raw_elements
-
-def filter_subjective_sentences(dataset, test_loader, model, lang, subj_lang):
+def create_subj_filter(dataset, model, lang, subj_lang):
     model.to(DEVICE)
     model.eval()
-    new_corpus = []
+    filter = []
     
     with torch.no_grad():
-        train_loader, dev_loader = dataset[0]
         
         # Filtrare il train set
-        for sample in train_loader:
-            new_raw_elements = batch_validate_samples(model, sample, lang, subj_lang)
-            new_corpus.extend(new_raw_elements)
-            
-        # Filtrare il dev set
-        for sample in dev_loader:
-            new_raw_elements = batch_validate_samples(model, sample, lang, subj_lang)
-            new_corpus.extend(new_raw_elements)
-            
+        for sample in dataset:
 
-        for sample in test_loader:
-            new_raw_elements = batch_validate_samples(model, sample, lang, subj_lang)
-            new_corpus.extend(new_raw_elements)    # Creare il nuovo oggetto Lang qui se necessario usando new_corpus
-    
-    return new_corpus
+            #print(sample['text'].shape, sample['vlabels'].shape, sample['lengths'].shape,'\n',sample)
+            outputs = model(sample['text'], sample['vlabels'], sample['lengths'])
+            predictions = torch.round(torch.sigmoid(outputs))
+            subjective_mask = predictions.view(-1) == 1
+
+            new_raw_elements = []
+            for i in range(sample['text'].size(0)):
+                if subj_lang.id2class[subjective_mask.tolist()[i]] == REMOVE_CLASS:
+
+                    decoded_text = lang.decode(sample['text'][i].tolist())[:sample['lengths'][i].item()]
+                    new_raw_elements.append(decoded_text)
+            filter.extend(decoded_text)
+
+    return filter
 
 def grid_search(parameters):
 
@@ -80,19 +62,17 @@ def grid_search(parameters):
 
         b_model, reports, losses = train_lm(combined_parameters)
         
-        average_f1 = np.mean([report[1] for report in reports])
-        average_acc = np.mean([report[2] for report in reports])
-        score = average_acc + average_f1
+        f = b_model[1][1]
+        acc = b_model[1][2]
 
-        print(f'- Average - Score F1: {average_f1} - Accuracy: {average_acc}')
         print(f'- Best model performance -  Score F1: {b_model[1][1]} - Accuracy: {b_model[1][2]}\n')
         
-        if score > best_score:
+        if f > best_score:
             best_model_reports = reports
             best_params = combined_parameters
             best_model = b_model 
             best_losses = losses
-            best_score = score
+            best_score = f
 
     print('\nEnd grid search:')
     print(f' - Best parameters: ',{key: combined_parameters[key] for key in best_params.keys() if key in best_params['grid_search_parameters'].keys()},'\n')
@@ -141,7 +121,7 @@ def train_model(parameters):
             best_model, reports, losses, best_params = grid_search(parameters)
         else:
             best_model, reports, losses = train_lm(parameters)
-           
+            best_params = parameters
         model = best_model[0]
 
         # Print losses
@@ -170,7 +150,8 @@ def init_model(parameters, model_state = None):
         output_size=parameters['output_size'],
         vocab_size=parameters['vocab_size'],
         dropout=parameters['dropout'],
-        bidirectional=parameters['bidirectional'],                    
+        bidirectional=parameters['bidirectional'], 
+        vader = parameters['vader_score']                   
     ).to(DEVICE)
     if model_state:
         model.load_state_dict(model_state)
@@ -213,8 +194,8 @@ def train_lm(parameters):
         acc = round(report['accuracy'], 3)
         reports.append([i, f, acc])
 
-        if ((f+acc)/2) > best_score:
-            best_score = (f+acc)/2
+        if f > best_score:
+            best_score = f
             best_model = (model, [i, f, acc])
         
         pbar.set_description(f'FOLD {i+1} - F1:{f} - A: {acc}')
