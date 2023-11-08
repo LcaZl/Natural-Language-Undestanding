@@ -8,7 +8,7 @@ if __name__ == "__main__":
     #Wrtite the code to load the datasets and to run your functions
     # Print the results
     folds, test_loader, lang = load_dataset()
-
+    exit(0)
     grid_search_parameters = {
         'hidden_layer_size': [250, 300, 350],
         'embedding_layer_size': [250, 300, 350],

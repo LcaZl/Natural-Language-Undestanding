@@ -10,9 +10,18 @@ from nltk.sentiment import SentimentIntensityAnalyzer
 import torch.utils.data as data
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
+from nltk.sentiment.util import mark_negation
+
 nltk.download('vader_lexicon')
 nltk.download('sentiwordnet')
 import torch
+import en_core_web_sm
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+import spacy
+
+nlp = spacy.load("en_core_web_sm")
 sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
@@ -31,30 +40,64 @@ def read_file(file_path):
 
 def process_raw_data(dataset):
     new_dataset = []
+    #stop_words = set(stopwords.words('english'))
+    #lemmatizer = WordNetLemmatizer()
+
     for sample in dataset:
         if sample:
             raw_sent, words_tagged = sample.split('####')
-            
             words_tagged = words_tagged.split()
-            tags = [w.split('=')[1] for w in words_tagged]
+            labels = [w.split('=')[1] for w in words_tagged]
             words = [w.split('=')[0] for w in words_tagged]
-            score = sia.polarity_scores(' '.join(words))['compound']
-            if score <= -0.6:
-                score = 'VNEG'  # Molto negativo
-            elif score <= -0.2:
-                score = 'NEG'  # Negativo
-            elif score <= 0.2:
-                score = 'NET'  # Neutrale
-            elif score <= 0.6:
-                score = 'POS'  # Positivo
+            
+            # Tokenizzazione e conversione in minuscolo
+            
+            # Estrazione degli aspetti (prima della rimozione delle stop words e della lemmatizzazione)
+            vscore = sia.polarity_scores(' '.join(tokens))['compound']
+            if vscore <= -0.6:
+                vscore = 'VNEG'  # Molto negativo
+            elif vscore <= -0.2:
+                vscore = 'NEG'  # Negativo
+            elif vscore <= 0.2:
+                vscore = 'NET'  # Neutrale
+            elif vscore <= 0.6:
+                vscore = 'POS'  # Positivo
             else:
-                score = 'VPOS'  # Molto positivo
-            print('vader score for:', ' '.join(words), ' -> ',score)
-            assert len(words) == len(tags)
+                vscore = 'VPOS'  # Molto positivo        
 
-            new_dataset.append((words, score, tags))
+            tokens = [word.lower() for word in words if word.isalpha()]
+
+            # Rimozione delle stop words e lemmatizzazione
+            #tokens = [lemmatizer.lemmatize(word) for word in tokens ]#if word not in stop_words]
+            
+            # Gestione della negazione
+            tokens = mark_negation(tokens)
+
+            new_dataset.append((tokens, vscore, labels))
 
     return new_dataset
+
+
+def extract_aspects(sent):
+    aspects = []
+    doc = nlp(sent)
+    for chunk in doc.noun_chunks:  # Utilizza noun_chunks per ottenere le frasi nominali
+        aspect = ''
+        opinion = ''
+        for tok in chunk:
+            if tok.dep_ == 'compound':  # per nomi composti
+                aspect = tok.text + ' ' + aspect  # Aggiungi il nome composto prima del sostantivo
+            elif tok.dep_ == 'amod':  # amod è un modificatore aggettivale
+                opinion += tok.text + ' '
+            elif tok.pos_ == 'NOUN':
+                aspect += tok.text
+        aspect = aspect.strip()
+        opinion = opinion.strip()
+        if aspect and opinion:  # Aggiungi solo se entrambi aspect e opinion non sono vuoti
+            aspects.append((aspect, opinion))
+        elif aspect:  # Se solo aspect è presente, aggiungilo senza opinion
+            aspects.append((aspect, None))
+    return aspects
 
 def load_dataset():
     print(f'\nLoading Dataset Laptop 14...')
@@ -66,10 +109,10 @@ def load_dataset():
     test_set = process_raw_data(test_raw)
 
     sents = [el[0] for el in train_set]
+    vscores = [el[1] for el in train_set]
     labels = [el[2] for el in train_set]
-    vader_labels = [el[1] for el in train_set]
 
-    lang = Lang(sents, labels, vader_labels)
+    lang = Lang(sents, vscores, labels)
 
     skf = KFold(n_splits=10, random_state=42, shuffle = True)
 
@@ -111,19 +154,22 @@ def load_dataset():
     return fold_datasets, test_loader, lang
     
 class Lang:
-    def __init__(self, sents, labels, vader_labels):
+    def __init__(self, sents, vlabels, labels):
         
         self.word2id = self.mapping_seq(sents, special_token = True)
         self.id2word = {id: word for word, id in self.word2id.items()}
 
+        self.vlabel2id = self.mapping_seq(vlabels, special_token=False)
+        self.id2vlabel = {id : vlabel for vlabel, id in self.id2vlabel}
+
         self.label2id = self.mapping_seq(labels, special_token = False)
         self.id2label = {id: label for label, id in self.label2id.items()}
 
-        self.vlabel2id = self.mapping_seq(vader_labels, special_token = False)
-        self.id2vlabel = {id: vlabel for vlabel, id in self.vlabel2id.items()}
-
         self.vocab_size = len(self.word2id)
         self.label_size = len(self.label2id)
+
+        print(' - Labels:', self.label2id)
+        print(' - Vader labels:', self.vlabel2id)
 
     def encode_sent(self, sentence):
         return [self.word2id.get(word, UNK_TOKEN) for word in sentence]
@@ -145,7 +191,6 @@ class Lang:
         if special_token:
             vocab['<UNK>'] = UNK_TOKEN
 
-
         for seq in seqs:
             for tok in seq: 
                 if not vocab.get(tok):
@@ -163,7 +208,7 @@ class Dataset(data.Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        sentence, score, labels = self.samples[idx]
+        sentence, aspects, labels  = self.samples[idx]
         encoded_sentence = self.lang.encode_sent(sentence)
         encoded_labels = self.lang.encode_labels(labels)
 
@@ -176,11 +221,10 @@ class Dataset(data.Dataset):
             print('-- Encoded :', encoded_sentence)
             print('-- Label:', labels)
             print('-- Encoded:', encoded_labels)
-            print('-- Score:', score)
             self.first = False
 
 
-        return {'text':tensor_sentence, 'label':tensor_labels, 'score':score}
+        return {'text':tensor_sentence, 'label':tensor_labels}
     
 
 def collate_fn(batch):
@@ -216,8 +260,7 @@ def collate_fn(batch):
 
     new_item['text'] = source.to(DEVICE)
     new_item['labels'] = labels.to(DEVICE)
-    new_item['vader'] = torch.Tensor(new_item['score']).to(DEVICE)
     new_item['lengths'] = torch.LongTensor(lengths).to(DEVICE)
     if INFO_ENABLED:
-        print('COLLATEFN:',new_item['text'].shape, new_item['labels'].shape, new_item['lengths'].shape, new_item['vader'].shape)
+        print('COLLATEFN:',new_item['text'].shape, new_item['labels'].shape, new_item['lengths'].shape)
     return new_item
