@@ -10,25 +10,27 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import classification_report
 from tabulate import tabulate
 import torch.nn.init as init
+from itertools import product
+
 from utils import *
 from model import *
 
 REMOVE_CLASS = 'obj'
 
 
-def batch_validate_samples(model, texts, lengths, labels, lang, subj_lang):
+def batch_validate_samples(model, sample, lang, subj_lang):
     # Questa funzione si aspetta che texts, lengths, labels siano batch
 
-    outputs = model(texts, lengths)
+    outputs = model(sample['text'], sample['lengths'])
     predictions = torch.round(torch.sigmoid(outputs))
     subjective_mask = predictions.view(-1) == 1
 
     new_raw_elements = []
-    for i in range(texts.size(0)):
+    for i in range(sample['text'].size(0)):
         if subj_lang.id2class[subjective_mask.tolist()[i]] != REMOVE_CLASS:
 
-            decoded_text = lang.decode(texts[i].tolist())[:lengths[i].item()]
-            new_raw_elem = (decoded_text, lang.id2class[labels[i].item()])
+            decoded_text = lang.decode(sample['text'][i].tolist())[:sample['lengths'][i].item()]
+            new_raw_elem = (decoded_text, lang.id2vlabel[sample['vlabes'][i].item()], lang.id2class[sample['labels'][i].item()])
             new_raw_elements.append(new_raw_elem)
 
     return new_raw_elements
@@ -43,22 +45,21 @@ def filter_subjective_sentences(dataset, test_loader, model, lang, subj_lang):
         
         # Filtrare il train set
         for sample in train_loader:
-            new_raw_elements = batch_validate_samples(model, sample['text'], sample['lengths'], sample['labels'], lang, subj_lang)
+            new_raw_elements = batch_validate_samples(model, sample, lang, subj_lang)
             new_corpus.extend(new_raw_elements)
             
         # Filtrare il dev set
         for sample in dev_loader:
-            new_raw_elements = batch_validate_samples(model, sample['text'], sample['lengths'], sample['labels'], lang, subj_lang)
+            new_raw_elements = batch_validate_samples(model, sample, lang, subj_lang)
             new_corpus.extend(new_raw_elements)
             
 
         for sample in test_loader:
-            new_raw_elements = batch_validate_samples(model, sample['text'], sample['lengths'], sample['labels'], lang, subj_lang)
+            new_raw_elements = batch_validate_samples(model, sample, lang, subj_lang)
             new_corpus.extend(new_raw_elements)    # Creare il nuovo oggetto Lang qui se necessario usando new_corpus
     
     return new_corpus
 
-from itertools import product
 def grid_search(parameters):
 
     print('Starting grid search for:', parameters['grid_search_parameters'].keys(), '\n')
@@ -226,7 +227,8 @@ def train_loop(data_loader, optimizer, model, parameters):
 
     for sample in data_loader:
         optimizer.zero_grad()
-        output = model(sample['text'], sample['lengths'])
+
+        output = model(sample['text'], sample['vlabels'], sample['lengths'])
         output = output.squeeze()
 
         loss = parameters['criterion'](output, sample['labels'].float())
@@ -248,7 +250,7 @@ def eval_loop(data_loader, model, parameters):
     with torch.no_grad():
         first_eval = True
         for sample in data_loader:
-            outputs = model(sample['text'], sample['lengths'])    
+            outputs = model(sample['text'], sample['vlabels'], sample['lengths'])    
             outputs = outputs.squeeze()  # Riduce la dimensione dell'output a [batch_size]
 
             loss = parameters['criterion'](outputs, sample['labels'].float())

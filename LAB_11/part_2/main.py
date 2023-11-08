@@ -20,18 +20,26 @@ if __name__ == "__main__":
             'task': 'Aspect Based Sentiment Analysis',
             'clip':5,
             'n_splits':10,
-            'output_size':1,
+            'output_size':lang.label_size,
             'optimizer':'Adam',
             'dropout': 0.10,
-            'grid_search':True,
+            'hidden_layer_size': 512,
+            'embedding_layer_size': 512,
+            'learning_rate': 0.001,
+            'bidirectional': True,
+            'grid_search':False,
             'grid_search_parameters': grid_search_parameters,
             'vocab_size': lang.vocab_size,
+            'criterion':nn.CrossEntropyLoss(),
             'train_folds':folds,
             'test_loader':test_loader,
             'lang':lang
         }
     
-    print(folds[0])
-    for sample in folds[0]:
-        print(sample)
-    #train_model(parameters)
+    model, training_report = train_model(parameters)
+    print('\nOutput:\n',tabulate(training_report, headers='keys', tablefmt='grid', showindex=True))
+    # Unisci i DataFrame utilizzando l'indice 'Fold'
+    combined_report = pd.concat([training_report.sort_index()], axis=1)
+
+
+    print('\nComaprison:\n',tabulate(combined_report, headers='keys', tablefmt='grid', showindex=True))

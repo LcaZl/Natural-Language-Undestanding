@@ -11,15 +11,18 @@ class SUBJ_Model(nn.Module):
         self.embedding = nn.Embedding(vocab_size, embedding_size, padding_idx=PAD_TOKEN)
 
         # Sostituire LSTM con RNN
-        self.rnn = nn.RNN(embedding_size, hidden_size, num_layers, batch_first=True, bidirectional=bidirectional, dropout=dropout if num_layers > 1 else 0)
+        self.rnn = nn.RNN(embedding_size, hidden_size, num_layers, batch_first=True, bidirectional=bidirectional)
         
+        self.vader_score_fc = nn.Linear(1, hidden_size)
+
         # Definire il fully connected layer
-        self.fc = nn.Linear(hidden_size * 2 if bidirectional else hidden_size, output_size)
-        
+        fc_input_size = hidden_size * 2 if bidirectional else hidden_size
+        fc_input_size += hidden_size  # aggiunta per il vader score
+        self.fc = nn.Linear(fc_input_size, output_size)        
         # Definire un dropout layer
         self.dropout = nn.Dropout(dropout)
         
-    def forward(self, text, text_lengths):
+    def forward(self, text, vader_scores, text_lengths):
         # text => [batch size, sent len]
         # text_lengths => [batch size]
 
@@ -42,5 +45,12 @@ class SUBJ_Model(nn.Module):
         else:
             hidden = hidden[-1,:,:]
 
+       # Aggiungere il vader score come feature
+        vader_scores = vader_scores.unsqueeze(1)  # Aggiungere una dimensione per il batch
+        vader_feature = self.vader_score_fc(vader_scores)
+
+        # Concatenare il vader score feature con gli stati nascosti
+        combined_feature = torch.cat((hidden, vader_feature), dim=1)
+
         # hidden => [batch size, hid dim]
-        return self.fc(hidden)  # [batch size, output dim]
+        return self.fc(combined_feature)  # [batch size, output dim]

@@ -17,10 +17,10 @@ sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
-DEVICE = 'cuda:0'
+DEVICE = 'cpu'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
-INFO_ENABLED = True
+INFO_ENABLED = False
 
 def read_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -39,7 +39,17 @@ def process_raw_data(dataset):
             tags = [w.split('=')[1] for w in words_tagged]
             words = [w.split('=')[0] for w in words_tagged]
             score = sia.polarity_scores(' '.join(words))['compound']
-
+            if score <= -0.6:
+                score = 'VNEG'  # Molto negativo
+            elif score <= -0.2:
+                score = 'NEG'  # Negativo
+            elif score <= 0.2:
+                score = 'NET'  # Neutrale
+            elif score <= 0.6:
+                score = 'POS'  # Positivo
+            else:
+                score = 'VPOS'  # Molto positivo
+            print('vader score for:', ' '.join(words), ' -> ',score)
             assert len(words) == len(tags)
 
             new_dataset.append((words, score, tags))
@@ -57,10 +67,9 @@ def load_dataset():
 
     sents = [el[0] for el in train_set]
     labels = [el[2] for el in train_set]
-    scores = [el[1] for el in train_set]
+    vader_labels = [el[1] for el in train_set]
 
-    print(train_set[0])
-    lang = Lang(sents, labels)
+    lang = Lang(sents, labels, vader_labels)
 
     skf = KFold(n_splits=10, random_state=42, shuffle = True)
 
@@ -74,14 +83,15 @@ def load_dataset():
         train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
 
-        train_loader = DataLoader(train_dataset, batch_size = 100, shuffle = True, collate_fn = collate_fn)
-        val_loader = DataLoader(val_dataset, batch_size = 100, shuffle = True, collate_fn = collate_fn)
+        train_loader = DataLoader(train_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
         
         fold_datasets.append((train_loader, val_loader))
         print(f' - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
 
     test_dataset = Dataset(test_set, lang)
-    test_loader = DataLoader(test_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
+
 
     print(' - Raw sent:', train_raw[0])
     print(' - Training sents:', len(train_raw))
@@ -91,23 +101,27 @@ def load_dataset():
     print(f' - Test len:', len(test_set))
     print(' - Test dataset:', len(test_dataset))
     print(f' - Training len:', len(train_set))
-
+    print(f' - Labels', lang.label2id)
     print(f' - Train sample:', train_set[0])
     print(f' - Train dataset sample:', train_dataset[0])
 
     print(f' - Test sample:', test_set[0])
     print(f' - Test dataset sample:', test_dataset[0])
     print('Dataset loaded.\n\n')
-    return fold_datasets, test_dataset, lang
+    return fold_datasets, test_loader, lang
     
 class Lang:
-    def __init__(self, sents, labels):
+    def __init__(self, sents, labels, vader_labels):
         
         self.word2id = self.mapping_seq(sents, special_token = True)
         self.id2word = {id: word for word, id in self.word2id.items()}
 
         self.label2id = self.mapping_seq(labels, special_token = False)
         self.id2label = {id: label for label, id in self.label2id.items()}
+
+        self.vlabel2id = self.mapping_seq(vader_labels, special_token = False)
+        self.id2vlabel = {id: vlabel for vlabel, id in self.vlabel2id.items()}
+
         self.vocab_size = len(self.word2id)
         self.label_size = len(self.label2id)
 
@@ -155,7 +169,7 @@ class Dataset(data.Dataset):
 
         tensor_sentence = torch.LongTensor(encoded_sentence)
         tensor_labels = torch.LongTensor(encoded_labels)
-
+        
         if self.first and INFO_ENABLED:
             print('- Sample')
             print('-- Sentence:', sentence)
@@ -204,6 +218,6 @@ def collate_fn(batch):
     new_item['labels'] = labels.to(DEVICE)
     new_item['vader'] = torch.Tensor(new_item['score']).to(DEVICE)
     new_item['lengths'] = torch.LongTensor(lengths).to(DEVICE)
-    #if INFO_ENABLED:
-        # print('COLLATEFN:',new_item['text'].shape, new_item['labels'].shape, new_item['lengths'].shape)
+    if INFO_ENABLED:
+        print('COLLATEFN:',new_item['text'].shape, new_item['labels'].shape, new_item['lengths'].shape, new_item['vader'].shape)
     return new_item

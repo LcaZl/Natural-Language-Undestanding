@@ -46,9 +46,9 @@ if __name__ == "__main__":
     print('Datasets loaded.\n')
 
     grid_search_parameters = {
-        'hidden_layer_size': [512, 576, 640, 708],
-        'embedding_layer_size': [512, 576, 640, 708],
-        'learning_rate': [0.001, 0.005, 0.0005, 0.00075],
+        'hidden_layer_size': [640, 708, 772, 836],
+        'embedding_layer_size': [640, 708, 772, 836],
+        'learning_rate': [0.008, 0.0009, 0.0007, 0.00075],
     }
 
     training_baseline = {
@@ -58,7 +58,7 @@ if __name__ == "__main__":
             'criterion': nn.BCEWithLogitsLoss(),
             'optimizer':'Adam',
             'dropout': 0.10,
-            'grid_search':True,
+            'grid_search':False,
             'grid_search_parameters': grid_search_parameters
     }
 
@@ -78,9 +78,9 @@ if __name__ == "__main__":
         'polarity_model':{
             **training_baseline,
             'task':'polarity_detection',
-            'learning_rate': 5e-5,
-            'hidden_layer_size':400,
-            'embedding_layer_size' : 400,
+            'learning_rate': 0.0009,
+            'hidden_layer_size':836,
+            'embedding_layer_size' : 772,
             'bidirectional':False,
             'vocab_size': mr_lang.vocab_size,
             'train_folds':mr_fold_dataset,
@@ -103,9 +103,9 @@ if __name__ == "__main__":
     training_parameters['polarity_model_no_obj'] = {
         **training_baseline,
         'task':'polarity_detection_with_filtered_dataset',
-        'learning_rate': 5e-5,
-        'hidden_layer_size':400,
-        'embedding_layer_size' : 400,
+        'learning_rate': 0.00075,
+        'hidden_layer_size':836,
+        'embedding_layer_size' : 836,
         'bidirectional':False,
         'vocab_size': mr2_lang.vocab_size,
         'train_folds':mr2_fold_dataset,

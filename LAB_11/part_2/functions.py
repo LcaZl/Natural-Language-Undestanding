@@ -1,9 +1,5 @@
 # Add the class of your model only
 # Here is where you define the architecture of your model using pytorch
-import torch.nn as nn
-import torch
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-import torch.nn.init as init
 import pandas as pd
 import os
 import torch.optim as optim
@@ -14,6 +10,8 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import classification_report
 from tabulate import tabulate
 import torch.nn.init as init
+from itertools import product
+
 from model import *
 from utils import *
 from evals import *
@@ -79,14 +77,13 @@ def init_weights(m):
 
 def init_model(parameters, model_state = None):
 
-    model = SUBJ_Model(
+    model = AspectTermExtractor(
         hidden_size=parameters['hidden_layer_size'],
         embedding_size=parameters['embedding_layer_size'],
         output_size=parameters['output_size'],
-        vocab_size=parameters['vocab_size'],
-        dropout=parameters['dropout'],
-        bidirectional=parameters['bidirectional'],                    
+        vocab_size=parameters['vocab_size']
     ).to(DEVICE)
+
     if model_state:
         model.load_state_dict(model_state)
     else:
@@ -120,10 +117,10 @@ def train_model(parameters):
         reports = [saved_data['report']]
     else:
         if parameters['grid_search']:
-            best_model, reports, losses, best_params = grid_search(parameters)
+            best_model, report, losses, best_params = grid_search(parameters)
         else:
-            best_model, reports, losses = train_lm(parameters)
-           
+            best_model, report, losses = train_lm(parameters)
+            best_params = parameters
         model = best_model[0]
 
         # Print losses
@@ -134,12 +131,101 @@ def train_model(parameters):
         if (parameters['task'] != 'polarity_detection_with_filtered_dataset'):
             data_to_save = {
                 'model_state': model.state_dict(),
-                'report': best_model[1],
-                'parameters':best_params
+                'report': report,
+                'parameters': best_params 
             }
             torch.save(data_to_save, model_filename)
 
     cols = ['Fold', 'F1-score', 'Accuracy']
-    training_report = pd.DataFrame(list(reports), columns=cols).set_index('Fold')
+    training_report = pd.DataFrame(report, columns=cols).set_index('Fold')
 
     return model, training_report
+
+def train_lm(parameters):
+    losses = {}
+    reports = []
+    best_score = 0
+
+    pbar = tqdm(range(0,parameters['n_splits']))
+    for i in pbar:
+        loss_idx = f'Fold_{i}'
+        losses[loss_idx] = []
+        model, optimizer = init_model(parameters)
+
+        train_loader, dev_loader = parameters['train_folds'][i]
+
+        loss = train_loop(train_loader, optimizer, model, parameters)
+        losses[loss_idx].append(loss)
+
+        loss, report = eval_loop(dev_loader, model, parameters)
+        losses[loss_idx].append(loss)
+
+        f = round(report[2], 3)
+        recall = round(report[1], 3)
+        prec = round(report[0], 3)
+
+        if f > best_score:
+            best_score = f
+            best_model = model
+        
+        pbar.set_description(f'FOLD {i+1} - F1:{f} - P:{prec} - R:{recall}')
+
+    loss, report = eval_loop(parameters['test_loader'], best_model, parameters)
+    losses[loss_idx].append(loss)
+    f = round(report[2], 3)
+    recall = round(report[1], 3)
+    prec = round(report[0], 3)
+    report = (model, [i, f, prec, recall])
+    return best_model, report, losses
+
+def train_loop(data_loader, optimizer, model, parameters):
+    model.train()
+    losses = []
+
+    for sample in data_loader:
+        optimizer.zero_grad()
+        # Il modello restituirà logits di dimensione [batch_size, seq_length, label_size]
+        output = model(sample['text'], sample['lengths'])
+        
+        # Ridimensiona l'output e le etichette per calcolare la loss
+        output = output.view(-1, output.shape[-1])  # Cambia la forma a [batch_size * seq_length, label_size]
+        labels = sample['labels'].view(-1)  # Cambia la forma a [batch_size * seq_length]
+        
+        loss = parameters['criterion'](output, labels)
+        losses.append(loss.item())
+
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
+        optimizer.step()
+
+    return round(np.mean(losses), 3)
+
+
+def eval_loop(data_loader, model, parameters):
+    model.eval()
+    all_preds = []
+    all_labels = []
+    losses = []
+
+    with torch.no_grad():
+        for sample in data_loader:
+            outputs = model(sample['text'], sample['lengths'])
+            outputs = outputs.view(-1, outputs.shape[-1])  # Cambia la forma a [batch_size * seq_length, label_size]
+            labels = sample['labels'].view(-1)  # Cambia la forma a [batch_size * seq_length]
+
+            loss = parameters['criterion'](outputs, labels)
+            losses.append(loss.item())
+            
+            # Calcola le probabilità e le predizioni
+            probs = torch.softmax(outputs, dim=1)
+            preds = torch.argmax(probs, dim=1)
+
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+    # Calcola le metriche di valutazione
+    all_preds = [parameters['lang'].id2label[id] for id in all_preds]
+    all_labels = [parameters['lang'].id2label[id] for id in all_labels]
+
+    report = evaluate_ote(all_labels, all_preds) # (PRECISION, RECALL, F1)
+
+    return round(np.mean(losses), 3), report

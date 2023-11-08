@@ -3,6 +3,28 @@ import numpy as np
 
 SMALL_POSITIVE_CONST = 1e-4
 
+def tag2ot(ote_tag_sequence):
+    """
+    transform ote tag sequence to a sequence of opinion target
+    :param ote_tag_sequence: tag sequence for ote task
+    :return:
+    """
+    n_tags = len(ote_tag_sequence)
+    ot_sequence = []
+    beg, end = -1, -1
+    for i in range(n_tags):
+        tag = ote_tag_sequence[i]
+        if tag == 'S':
+            ot_sequence.append((i, i))
+        elif tag == 'B':
+            beg = i
+        elif tag == 'E':
+            end = i
+            if end > beg > -1:
+                ot_sequence.append((beg, end))
+                beg, end = -1, -1
+    return ot_sequence
+
 def evaluate_ote(gold_ot, pred_ot):
     """
     evaluate the model performce for the ote task

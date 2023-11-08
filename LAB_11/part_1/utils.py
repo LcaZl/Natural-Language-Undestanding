@@ -20,27 +20,47 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from nltk.sentiment.vader import SentimentIntensityAnalyzer, VaderConstants
-vlex = VaderConstants()
+
+from nltk.sentiment import SentimentIntensityAnalyzer
+sia = SentimentIntensityAnalyzer()
 
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
-DEVICE = 'cuda:0'
+DEVICE = 'cpu'
 INFO_ENABLED = False
 MAX_VOCAB_SIZE = 10000
 
-def preprocess(text, mark_neg = False):
-    stop_words = set(stopwords.words('english'))
-    lemmatizer = WordNetLemmatizer()
-    
-    tokens = word_tokenize(text)
-    tokens = [word.lower() for word in tokens if word.isalpha()]
-    tokens = [word for word in tokens if word not in stop_words]
-    #tokens = [lemmatizer.lemmatize(word) for word in tokens]
-    if mark_neg:
-        tokens = mark_negation(tokens)
+def preprocess(dataset, label, mark_neg = True):
+    new_dataset = []
+    for sent in dataset:
+        text = ' '.join(sent)
 
-    return tokens
+        stop_words = set(stopwords.words('english'))
+        lemmatizer = WordNetLemmatizer()
+        
+        vscore = sia.polarity_scores(text)['compound']
+        if vscore <= -0.6:
+            vscore = 'VNEG'  # Molto negativo
+        elif vscore <= -0.2:
+            vscore = 'NEG'  # Negativo
+        elif vscore <= 0.2:
+            vscore = 'NET'  # Neutrale
+        elif vscore <= 0.6:
+            vscore = 'POS'  # Positivo
+        else:
+            vscore = 'VPOS'  # Molto positivo
+
+        tokens = word_tokenize(text)
+        tokens = [word.lower() for word in tokens if word.isalpha()]
+        #tokens = [lemmatizer.lemmatize(word) for word in tokens]
+        tokens = [word for word in tokens if word not in stop_words]
+
+        if mark_neg:
+            tokens = mark_negation(tokens)
+
+        new_dataset.append((tokens, vscore, label))
+    return new_dataset
 
 def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
     print(f'Loading Dataset {dataset_name}...')
@@ -49,24 +69,23 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
     # Load subjectivity dataset and preprocess texts
         print(' - Categories:', subjectivity.categories())
-        grp1_sentences = [(preprocess(' '.join(sent)), 'subj') for sent in subjectivity.sents(categories='subj')] # (Lista token, label)
-        grp2_sentences = [(preprocess(' '.join(sent)), 'obj') for sent in subjectivity.sents(categories='obj')]
+        grp1_sentences = preprocess(subjectivity.sents(categories='subj'), label='subj') # (Lista token, label)
+        grp2_sentences = preprocess(subjectivity.sents(categories='obj'), label='obj') # (Lista token, label)
         categories = subjectivity.categories()
 
     elif dataset_name == 'Movie_reviews':
 
         mr = movie_reviews
         categories = mr.categories()
-
         print(' - Categories:', mr.categories())
-        grp1_sentences = [(preprocess(' '.join([' '.join(sublist) for sublist in para]), mark_neg=True), 'neg') for para in mr.paras(categories='neg')]
-        grp2_sentences = [(preprocess(' '.join([' '.join(sublist) for sublist in para])), 'pos') for para in mr.paras(categories='pos')]
+        grp1_sentences = preprocess([sent for group in mr.paras(categories='neg') for sent in group], label = 'neg')
+        grp2_sentences = preprocess([sent for group in mr.paras(categories='pos') for sent in group], label = 'pos')
 
     elif dataset_name == 'Filtered_movie_reviews':
         mr = movie_reviews
         categories = mr.categories()
-        grp1_sentences = [(el, label) for el, label in args[0] if label == 'neg']
-        grp2_sentences = [(el, label) for el, label in args[0] if label == 'pos']
+        grp1_sentences = [(el, label, vscore) for el, label, vscore in args[0] if label == 'neg']
+        grp2_sentences = [(el, label, vscore) for el, label, vscore in args[0] if label == 'pos']
     else:
         raise Exception('Dataset name not recognized.')
     
@@ -78,7 +97,7 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
     # Build vocabulary
     lang = Lang(train_sentences, categories)
 
-    train_labels = [label for _, label in train_sentences]
+    train_labels = [label for _, _, label in train_sentences]
     fold_datasets = []  # This will store the dataset splits
     for k, (train_indices, val_indices) in enumerate(kfold.split(train_sentences, train_labels)):
         # Split the data into training and validation sets for the current fold
@@ -98,7 +117,7 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
         fold_datasets.append((train_loader, val_loader))
 
     test_dataset = Dataset(test_sentences, lang)
-    test_loader = DataLoader(test_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
 
     # Subjectivity dataset
     #print(' - All sentences:', all_sentences[:3])
@@ -108,19 +127,27 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
     print(f'{dataset_name} folds (', len(fold_datasets), '):')
     for k, fold in enumerate(fold_datasets):
         print('- Fold',k,' dim -> Train:',len(fold[0]), 'Dev:', len(fold[1]))
+
+    print(' - Sample:', train_dataset[0])
     print('Datasets loaded!\n')
     return fold_datasets, test_loader, lang
 
 class Lang:
     def __init__(self, text, classes):
-        self.word2id = self.mapping_seq([el for el, _ in text], special_token = True)
-        self.vocab_size = len(self.word2id)
+        self.word2id = self.mapping_seq([el for el, _, _ in text], special_token = True)
         self.id2word = {id: word for word, id in self.word2id.items()}
+
+        self.vlabel2id = self.mapping_seq([[vlabel for _, vlabel, _ in text]], special_token = False)
+        self.id2vlabel = {id: vlabel for vlabel, id in self.vlabel2id.items()}
+
+        self.vocab_size = len(self.word2id)
+
         self.class2id = {}
         for i, cls in enumerate(classes):
             self.class2id[cls] = i
+
         self.id2class = {i:c for c, i in self.class2id.items()}
-        print(' - Classes Ids:',self.class2id)
+        print(' - Classes Ids:',self.vlabel2id)
 
     def encode(self, sentence):
         return [self.word2id.get(word, UNK_TOKEN) for word in sentence]
@@ -129,16 +156,18 @@ class Lang:
         return [self.id2word[id] for id in sentence_ids]
     
     def mapping_seq(self, sentences, special_token = False):
-        word_counts = Counter(word for sent in sentences for word in sent)
-        most_common_words = word_counts.most_common(MAX_VOCAB_SIZE - 2 if special_token else MAX_VOCAB_SIZE)
+        #word_counts = Counter(word for sent in sentences for word in sent)
+        #most_common_words = word_counts.most_common(MAX_VOCAB_SIZE)
+
         vocab = {}
+        vocab['<PAD>'] = PAD_TOKEN
 
         if special_token:
-            vocab['<PAD>'] = PAD_TOKEN
             vocab['<UNK>'] = UNK_TOKEN
-
-        for _, (word, _) in enumerate(most_common_words): 
-            vocab[word] = len(vocab)
+        for sent in sentences:
+            for word in sent: 
+                if not vocab.get(word):
+                    vocab[word] = len(vocab)
 
         return vocab
 
@@ -152,10 +181,12 @@ class Dataset(data.Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        sentence, label = self.samples[idx]
+        sentence, vlabel, label = self.samples[idx]
         encoded_sentence = self.lang.encode(sentence)
+        encoded_vlabel = self.lang.vlabel2id[vlabel]
 
         tensor_sentence = torch.LongTensor(encoded_sentence)
+        tensor_vlabel = encoded_vlabel
         tensor_label = self.lang.class2id[label]
 
         if self.first and INFO_ENABLED:
@@ -164,10 +195,12 @@ class Dataset(data.Dataset):
             print('-- Encoded :', encoded_sentence)
             print('-- Label:', label)
             print('-- Encoded:', tensor_label)
+            print('-- vlabel:', vlabel)
+            print('--Encoded:', encoded_vlabel)
             self.first = False
 
 
-        return {'text':tensor_sentence, 'label':tensor_label}
+        return {'text':tensor_sentence, 'vlabel': tensor_label, 'label':tensor_label}
     
 # Preprocessing function
 
@@ -206,7 +239,8 @@ def collate_fn(batch):
     new_item['text'] = source.to(DEVICE)
     new_item['labels'] = torch.LongTensor(new_item['label']).to(DEVICE)
     new_item['lengths'] = torch.LongTensor(lengths).to(DEVICE)
+    new_item['vlabels'] = torch.LongTensor(new_item['vlabel']).to(DEVICE)
     #if INFO_ENABLED:
-       # print('COLLATEFN:',new_item['text'].shape, new_item['labels'].shape, new_item['lengths'].shape)
+        #print('COLLATEFN:',new_item['text'].shape, new_item['vlabels'].shape, new_item['labels'].shape, new_item['lengths'].shape)
     return new_item
 
