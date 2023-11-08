@@ -183,10 +183,9 @@ class Dataset(data.Dataset):
     def __getitem__(self, idx):
         sentence, vlabel, label = self.samples[idx]
         encoded_sentence = self.lang.encode(sentence)
-        encoded_vlabel = self.lang.vlabel2id[vlabel]
 
         tensor_sentence = torch.LongTensor(encoded_sentence)
-        tensor_vlabel = encoded_vlabel
+        tensor_vlabel = self.lang.vlabel2id[vlabel]
         tensor_label = self.lang.class2id[label]
 
         if self.first and INFO_ENABLED:
@@ -196,11 +195,11 @@ class Dataset(data.Dataset):
             print('-- Label:', label)
             print('-- Encoded:', tensor_label)
             print('-- vlabel:', vlabel)
-            print('--Encoded:', encoded_vlabel)
+            print('--Encoded:', self.lang.vlabel2id[vlabel])
             self.first = False
 
 
-        return {'text':tensor_sentence, 'vlabel': tensor_label, 'label':tensor_label}
+        return {'text':tensor_sentence, 'vlabel': tensor_vlabel, 'label':tensor_label}
     
 # Preprocessing function
 

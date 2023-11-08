@@ -25,7 +25,6 @@ class SUBJ_Model(nn.Module):
     def forward(self, text, vader_scores, text_lengths):
         # text => [batch size, sent len]
         # text_lengths => [batch size]
-
         embedded = self.dropout(self.embedding(text))  # embedded => [batch size, sent len, emb dim]
 
         # Pack sequence
@@ -46,6 +45,7 @@ class SUBJ_Model(nn.Module):
             hidden = hidden[-1,:,:]
 
        # Aggiungere il vader score come feature
+        vader_scores = vader_scores.float()
         vader_scores = vader_scores.unsqueeze(1)  # Aggiungere una dimensione per il batch
         vader_feature = self.vader_score_fc(vader_scores)
 

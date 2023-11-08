@@ -46,9 +46,9 @@ if __name__ == "__main__":
     print('Datasets loaded.\n')
 
     grid_search_parameters = {
-        'hidden_layer_size': [640, 708, 772, 836],
-        'embedding_layer_size': [640, 708, 772, 836],
-        'learning_rate': [0.008, 0.0009, 0.0007, 0.00075],
+        'hidden_layer_size': [128, 256, 512],
+        'embedding_layer_size': [128, 256, 512],
+        'learning_rate': [0.01, 0.005, 0.001, 0.0005, 0.0001],
     }
 
     training_baseline = {
@@ -58,7 +58,7 @@ if __name__ == "__main__":
             'criterion': nn.BCEWithLogitsLoss(),
             'optimizer':'Adam',
             'dropout': 0.10,
-            'grid_search':False,
+            'grid_search':True,
             'grid_search_parameters': grid_search_parameters
     }
 
