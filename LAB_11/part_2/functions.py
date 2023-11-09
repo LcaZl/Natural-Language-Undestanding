@@ -148,24 +148,26 @@ def eval_loop(data_loader, model, parameters):
             loss = aspect_loss + polarity_loss           
             losses.append(loss.item())
             
-            # Calcola le probabilità e le previsioni per gli aspetti
-            aspect_probs = torch.softmax(aspect_logits, dim=1)
+            active_mask = sample['attention_mask'].view(-1) == 1
+            active_aspect_logits = aspect_logits.view(-1, aspect_logits.shape[-1])[active_mask]
+            active_polarity_logits = polarity_logits.view(-1, polarity_logits.shape[-1])[active_mask]
+
+            active_aspect_labels = sample['y_aspects'].view(-1)[active_mask]
+            active_polarity_labels = sample['y_polarities'].view(-1)[active_mask]
+
+            # Ora calcola le probabilità e le predizioni solo per i token attivi
+            aspect_probs = torch.softmax(active_aspect_logits, dim=1)
             aspect_preds_batch = torch.argmax(aspect_probs, dim=1)
             aspect_preds.extend(aspect_preds_batch.cpu().numpy())
-            aspect_labels.extend(sample['y_aspects'].view(-1).cpu().numpy())
-            
-            # Calcola le probabilità e le previsioni per la polarità
-            polarity_probs = torch.softmax(polarity_logits, dim=1)
+            aspect_labels.extend(active_aspect_labels.cpu().numpy())
+
+            polarity_probs = torch.softmax(active_polarity_logits, dim=1)
             polarity_preds_batch = torch.argmax(polarity_probs, dim=1)
             polarity_preds.extend(polarity_preds_batch.cpu().numpy())
-            polarity_labels.extend(sample['y_polarities'].view(-1).cpu().numpy())
-
-    # Calcola le metriche di valutazione
-    all_preds = [parameters['lang'].id2label[id] for id in all_preds]
-    all_labels = [parameters['lang'].id2label[id] for id in all_labels]
+            polarity_labels.extend(active_polarity_labels.cpu().numpy())
 
     report = evaluate(aspect_labels, polarity_labels, aspect_preds, polarity_preds) # (PRECISION, RECALL, F1)
-    print(report)
+    print('evaluate report:', report)
     return round(np.mean(losses), 3), report
 
 

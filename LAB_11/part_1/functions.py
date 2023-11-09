@@ -96,6 +96,31 @@ def init_weights(m):
             # Zero initialization for the linear layer biases
             init.zeros_(m.bias)
 
+def init_model(parameters, model_state = None):
+
+    model = SUBJ_Model(
+        hidden_size=parameters['hidden_layer_size'],
+        embedding_size=parameters['embedding_layer_size'],
+        output_size=parameters['output_size'],
+        vocab_size=parameters['vocab_size'],
+        dropout=parameters['dropout'],
+        bidirectional=parameters['bidirectional'], 
+        vader = parameters['vader_score']                   
+    ).to(DEVICE)
+    if model_state:
+        model.load_state_dict(model_state)
+    else:
+        model.apply(init_weights)
+
+    if parameters['optimizer'] == 'SGD':
+        optimizer = optim.SGD(model.parameters(), 
+                    lr=parameters['learning_rate'])
+    elif parameters['optimizer'] == 'Adam':
+        optimizer = optim.AdamW(model.parameters(), 
+                            lr=parameters['learning_rate'])
+
+    return model, optimizer
+
 def train_model(parameters):
 
     print(f'\nStart Training:')
@@ -139,30 +164,7 @@ def train_model(parameters):
 
     return model, training_report
 
-def init_model(parameters, model_state = None):
 
-    model = SUBJ_Model(
-        hidden_size=parameters['hidden_layer_size'],
-        embedding_size=parameters['embedding_layer_size'],
-        output_size=parameters['output_size'],
-        vocab_size=parameters['vocab_size'],
-        dropout=parameters['dropout'],
-        bidirectional=parameters['bidirectional'], 
-        vader = parameters['vader_score']                   
-    ).to(DEVICE)
-    if model_state:
-        model.load_state_dict(model_state)
-    else:
-        model.apply(init_weights)
-
-    if parameters['optimizer'] == 'SGD':
-        optimizer = optim.SGD(model.parameters(), 
-                    lr=parameters['learning_rate'])
-    elif parameters['optimizer'] == 'Adam':
-        optimizer = optim.AdamW(model.parameters(), 
-                            lr=parameters['learning_rate'])
-
-    return model, optimizer
 
 
 def train_lm(parameters):

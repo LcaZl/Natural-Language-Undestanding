@@ -28,10 +28,11 @@ sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
-DEVICE = 'cpu'
+DEVICE = 'cuda:0'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
-INFO_ENABLED = False
+INFO_ENABLED = True
+BERT_MAX_LEN = 512
 
 def read_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -53,23 +54,17 @@ def process_raw_data(dataset):
             text = []
             for w in words_tagged:
 
-                if w.startswith('=='):
-                    word = '='
-                    tag = w[2:]
-                else:
-                    word, tag = w.rsplit('=', 1)
+                word, tag = w.rsplit('=', 1)
+
                 if tag != 'O' and tag != 'ASPECT0' and tag != '':
                     aspect_tag, pol_tag = tag.split('-')
                 else:
                     aspect_tag = 'O'
-                    pol_tag = 'O'
+                    pol_tag = 'NEU'
 
                 aspect_tags.append(aspect_tag)
                 pol_tags.append(pol_tag)
                 text.append(word)
-            print('sample text:', text)
-            print('sample aspc:', aspect_tags)
-            print('sample pola:', pol_tags)
             text = ' '.join(text)    
 
             new_dataset.append((text, aspect_tags, pol_tags))
@@ -111,7 +106,10 @@ def load_dataset():
     test_dataset = Dataset(test_set, lang)
     test_loader = DataLoader(test_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
 
-
+    print(' - Aspects labels :', lang.aspect2id)
+    print(' - Polarity labels:', lang.pol2id)
+    print(' - Vocabulary size:', lang.vocab_size)
+    print(' - Special tokens (CLS e SEP ids):', lang.cls_token_id, lang.sep_token_id)
     print(' - Raw sent:', train_raw[0])
     print(' - Raw training samples:', len(train_raw))
     print(' - Preprocessed training len:', len(train_set))
@@ -144,11 +142,6 @@ class Lang:
         self.vocab_size = len(self.tokenizer.vocab)
         self.aspects = len(self.aspect2id)
         self.polarities = len(self.pol2id)
-
-        print(' - Aspects labels :', self.aspect2id)
-        print(' - Polarity labels:', self.pol2id)
-        print(' - Vocabulary size:', self.vocab_size)
-        print(' - Special tokens (CLS e SEP ids):', self.cls_token_id, self.sep_token_id)
     
     def mapping_seq(self, seqs, special_token = False):
         vocab = {}
@@ -165,10 +158,16 @@ class Lang:
 
         return vocab
     
+    def map_aspect_ote(self, asp):
+        if asp == 'T':
+            return 'S'
+        elif self.id2aspect[asp] == 'T':
+            return 'S'
+        
 class Dataset(data.Dataset):
     def __init__(self, dataset, lang):
         self.lang = lang
-        self.utt_ids, self.asp_ids, self.pol_ids,  self.attention_masks, self.token_types = self.prepare_data(dataset)
+        self.utt_ids, self.asp_ids, self.pol_ids, self.attention_masks, self.token_types = self.prepare_data(dataset)
         self.first = True
 
     def prepare_data(self, dataset):
@@ -244,7 +243,6 @@ class Dataset(data.Dataset):
             'token_type_ids': torch.tensor(self.token_types[idx])
         }
     
-BERT_MAX_LEN = 512
 def collate_fn(data):
     def merge(sequences):
         '''
@@ -283,10 +281,9 @@ def collate_fn(data):
     new_item["texts"] = text
     new_item["y_aspects"] = y_aspects
     new_item['y_polarities'] = y_polarities
-    new_item["tags_len"] = y_lengths
     new_item["attention_mask"] = attention_mask
     new_item['token_type_ids'] = token_type_ids
 
-    sample = {'utterances': text.shape, 'tags_len': y_lengths.shape, 'yaspects':y_aspects.shape, 'ypolarities':y_aspects.shape,'attention_mask':attention_mask.shape}
-    print('-   Collate_fn :', sample)
+    #sample = {'utterances': text.shape, 'yaspects':y_aspects.shape, 'ypolarities':y_aspects.shape,'attention_mask':attention_mask.shape}
+    #print('-   Collate_fn :', sample)
     return new_item
