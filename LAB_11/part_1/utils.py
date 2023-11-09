@@ -85,6 +85,15 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
     elif dataset_name == 'Filtered_movie_reviews':
 
         mr = movie_reviews
+        filter = args[0]
+        new_mr = {}
+        for doc in mr.paras(categories='neg'):
+            new_doc = []
+            for sent in doc:
+                print('sent', sent)
+                exit(0)
+        #for doc in mr.paras(categories='pos'):
+
         categories = mr.categories()
         grp1_sentences = [(el, vscore, label) for el, label, vscore in args[0] if label == 'neg']
         grp2_sentences = [(el, vscore, label) for el, label, vscore in args[0] if label == 'pos']
@@ -96,8 +105,8 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
         all_sentences = []
         print(' - Categories:', mr.categories())
-        grp1_sentences = [preprocess([sent], 'neg', file_pos=i, file_id=file_id) for file_id in movie_reviews.fileids(categories='neg') for i, sent in enumerate(movie_reviews.sents(file_id))]
-        all_sentences = grp1_sentences + [preprocess([sent], 'pos', file_pos=i, file_id=file_id) for file_id in movie_reviews.fileids(categories='pos') for i, sent in enumerate(movie_reviews.sents(file_id))]
+        grp1_sentences = [preprocess([sent], 'neg', file_id=file_id) for file_id in movie_reviews.fileids(categories='neg') for i, sent in movie_reviews.sents(file_id)]
+        all_sentences = grp1_sentences + [preprocess([sent], 'pos', file_id=file_id) for file_id in movie_reviews.fileids(categories='pos') for i, sent in movie_reviews.sents(file_id)]
         print(all_sentences[0])
         lang = Lang(all_sentences, categories)
         dataset = Dataset(all_sentences, lang)
@@ -156,10 +165,10 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
 class Lang:
     def __init__(self, text, classes):
-        self.word2id = self.mapping_seq([el for el, _, _, _, _ in text], special_token = True)
+        self.word2id = self.mapping_seq([el for el, _, _, _ in text], special_token = True)
         self.id2word = {id: word for word, id in self.word2id.items()}
 
-        self.vlabel2id = self.mapping_seq([[vlabel for _, vlabel, _, _, _ in text]], special_token = False)
+        self.vlabel2id = self.mapping_seq([[vlabel for _, vlabel, _, _ in text]], special_token = False)
         self.id2vlabel = {id: vlabel for vlabel, id in self.vlabel2id.items()}
 
         self.vocab_size = len(self.word2id)
@@ -204,7 +213,7 @@ class Dataset(data.Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        sentence, vlabel, label, doc_id, doc_pos = self.samples[idx]
+        sentence, vlabel, label, doc_id = self.samples[idx]
         encoded_sentence = self.lang.encode(sentence)
 
         tensor_sentence = torch.LongTensor(encoded_sentence)
@@ -222,7 +231,7 @@ class Dataset(data.Dataset):
             self.first = False
 
 
-        return {'text':tensor_sentence, 'vlabel': tensor_vlabel, 'label':tensor_label, 'docid': doc_id, 'docpos':doc_pos}
+        return {'text':tensor_sentence, 'vlabel': tensor_vlabel, 'label':tensor_label, 'docid': doc_id}
     
 # Preprocessing function
 def collate_fn(batch):

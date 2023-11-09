@@ -78,27 +78,6 @@ def process_raw_data(dataset):
     return new_dataset
 
 
-def extract_aspects(sent):
-    aspects = []
-    doc = nlp(sent)
-    for chunk in doc.noun_chunks:  # Utilizza noun_chunks per ottenere le frasi nominali
-        aspect = ''
-        opinion = ''
-        for tok in chunk:
-            if tok.dep_ == 'compound':  # per nomi composti
-                aspect = tok.text + ' ' + aspect  # Aggiungi il nome composto prima del sostantivo
-            elif tok.dep_ == 'amod':  # amod è un modificatore aggettivale
-                opinion += tok.text + ' '
-            elif tok.pos_ == 'NOUN':
-                aspect += tok.text
-        aspect = aspect.strip()
-        opinion = opinion.strip()
-        if aspect and opinion:  # Aggiungi solo se entrambi aspect e opinion non sono vuoti
-            aspects.append((aspect, opinion))
-        elif aspect:  # Se solo aspect è presente, aggiungilo senza opinion
-            aspects.append((aspect, None))
-    return aspects
-
 def load_dataset():
     print(f'\nLoading Dataset Laptop 14...')
 

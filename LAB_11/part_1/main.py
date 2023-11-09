@@ -86,7 +86,7 @@ if __name__ == "__main__":
 
             'task':'polarity_detection',
 
-            'learning_rate': 5e-5,
+            'learning_rate': 5e-4,
             'hidden_layer_size':300,
             'embedding_layer_size' : 300,
             'bidirectional':True,
