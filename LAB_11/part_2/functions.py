@@ -16,78 +16,15 @@ from model import *
 from utils import *
 from evals import *
 
-def grid_search(parameters):
-
-    print('Starting grid search for:', parameters['grid_search_parameters'].keys(), '\n')
-    grid = list(product(*parameters['grid_search_parameters'].values()))
-    def to_parameter_dict(keys, values):
-        return {key: value for key, value in zip(keys, values)}
-
-    best_score = 0
-    best_params = None
-    best_model = None
-    best_losses = None
-    best_model_reports = None
-
-    for i, params_tuple in enumerate(grid):
-        combined_parameters = {**parameters, **to_parameter_dict(parameters['grid_search_parameters'].keys(), params_tuple)}
-
-        print(f'({i+1}/{len(grid)})- Current parameters:',{key: combined_parameters[key] for key in combined_parameters.keys() if key in combined_parameters['grid_search_parameters'].keys()})
-
-        b_model, reports, losses = train_lm(combined_parameters)
-        
-        average_f1 = np.mean([report[1] for report in reports])
-        average_acc = np.mean([report[2] for report in reports])
-        score = average_acc + average_f1
-
-        print(f'- Average - Score F1: {average_f1} - Accuracy: {average_acc}')
-        print(f'- Best model performance -  Score F1: {b_model[1][1]} - Accuracy: {b_model[1][2]}\n')
-        
-        if score > best_score:
-            best_model_reports = reports
-            best_params = combined_parameters
-            best_model = b_model 
-            best_losses = losses
-            best_score = score
-
-    print('\nEnd grid search:')
-    print(f' - Best parameters: ',{key: combined_parameters[key] for key in best_params.keys() if key in best_params['grid_search_parameters'].keys()},'\n')
-
-    return best_model, best_model_reports, best_losses, best_params
-
-def init_weights(m):
-    if isinstance(m, nn.RNN):
-        # Initialize the RNN layers
-        for name, param in m.named_parameters():
-            if 'weight_ih' in name:
-                # Xavier initialization for input to hidden weights
-                init.xavier_uniform_(param.data)
-            elif 'weight_hh' in name:
-                # Orthogonal initialization for hidden to hidden weights
-                init.orthogonal_(param.data)
-            elif 'bias' in name:
-                # Zero initialization for biases
-                init.zeros_(param.data)
-    elif isinstance(m, nn.Linear):
-        # Kaiming initialization for the linear layers
-        init.kaiming_uniform_(m.weight, nonlinearity='relu')
-        if m.bias is not None:
-            # Zero initialization for the linear layer biases
-            init.zeros_(m.bias)
-
 def init_model(parameters, model_state = None):
 
-    model = AspectTermExtractor(
-        hidden_size=parameters['hidden_layer_size'],
-        embedding_size=parameters['embedding_layer_size'],
-        output_size=parameters['output_size'],
-        vocab_size=parameters['vocab_size']
+    model = jointBERT(
+        output_aspects=parameters['output_aspects'],
+        output_polarities = parameters['output_polarities']
     ).to(DEVICE)
 
     if model_state:
         model.load_state_dict(model_state)
-    else:
-        model.apply(init_weights)
 
     if parameters['optimizer'] == 'SGD':
         optimizer = optim.SGD(model.parameters(), 
@@ -116,25 +53,23 @@ def train_model(parameters):
         model, _ = init_model(parameters, saved_data['model_state'])
         reports = [saved_data['report']]
     else:
-        if parameters['grid_search']:
-            best_model, report, losses, best_params = grid_search(parameters)
-        else:
-            best_model, report, losses = train_lm(parameters)
-            best_params = parameters
+        #if parameters['grid_search']:
+            #best_model, report, losses, best_params = grid_search(parameters)
+        #else:
+        best_model, report, losses = train_lm(parameters)
+        best_params = parameters
         model = best_model[0]
 
         # Print losses
         for fold, losses in losses.items():
             print(f'Loss for {fold}:{losses}')
 
-        # Save model and scores
-        if (parameters['task'] != 'polarity_detection_with_filtered_dataset'):
-            data_to_save = {
-                'model_state': model.state_dict(),
-                'report': report,
-                'parameters': best_params 
-            }
-            torch.save(data_to_save, model_filename)
+        data_to_save = {
+            'model_state': model.state_dict(),
+            'report': report,
+            'parameters': best_params 
+        }
+        torch.save(data_to_save, model_filename)
 
     cols = ['Fold', 'F1-score', 'Accuracy']
     training_report = pd.DataFrame(report, columns=cols).set_index('Fold')
@@ -184,16 +119,11 @@ def train_loop(data_loader, optimizer, model, parameters):
 
     for sample in data_loader:
         optimizer.zero_grad()
-        # Il modello restituirà logits di dimensione [batch_size, seq_length, label_size]
-        output = model(sample['text'], sample['lengths'])
-        
-        # Ridimensiona l'output e le etichette per calcolare la loss
-        output = output.view(-1, output.shape[-1])  # Cambia la forma a [batch_size * seq_length, label_size]
-        labels = sample['labels'].view(-1)  # Cambia la forma a [batch_size * seq_length]
-        
-        loss = parameters['criterion'](output, labels)
+        aspect_logits, polarity_logits = model(sample['texts'], sample['attention_mask'], None)
+        aspect_loss = parameters['criterion'](aspect_logits.view(-1, aspect_logits.shape[-1]), sample['y_aspects'].view(-1))
+        polarity_loss = parameters['criterion'](polarity_logits.view(-1, polarity_logits.shape[-1]), sample['y_polarities'].view(-1))
+        loss = aspect_loss + polarity_loss  # Considera di pesare diversamente le due loss se necessario
         losses.append(loss.item())
-
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
         optimizer.step()
@@ -203,29 +133,39 @@ def train_loop(data_loader, optimizer, model, parameters):
 
 def eval_loop(data_loader, model, parameters):
     model.eval()
-    all_preds = []
-    all_labels = []
+    aspect_preds = []
+    aspect_labels = []
+    polarity_preds = []
+    polarity_labels = []
     losses = []
 
     with torch.no_grad():
         for sample in data_loader:
-            outputs = model(sample['text'], sample['lengths'])
-            outputs = outputs.view(-1, outputs.shape[-1])  # Cambia la forma a [batch_size * seq_length, label_size]
-            labels = sample['labels'].view(-1)  # Cambia la forma a [batch_size * seq_length]
+            aspect_logits, polarity_logits = model(sample['texts'], sample['attention_mask'], sample['token_type_ids'])
 
-            loss = parameters['criterion'](outputs, labels)
+            aspect_loss = parameters['criterion'](aspect_logits.view(-1, aspect_logits.shape[-1]), sample['y_aspects'].view(-1))
+            polarity_loss = parameters['criterion'](polarity_logits.view(-1, polarity_logits.shape[-1]), sample['y_polarities'].view(-1))
+            loss = aspect_loss + polarity_loss           
             losses.append(loss.item())
             
-            # Calcola le probabilità e le predizioni
-            probs = torch.softmax(outputs, dim=1)
-            preds = torch.argmax(probs, dim=1)
+            # Calcola le probabilità e le previsioni per gli aspetti
+            aspect_probs = torch.softmax(aspect_logits, dim=1)
+            aspect_preds_batch = torch.argmax(aspect_probs, dim=1)
+            aspect_preds.extend(aspect_preds_batch.cpu().numpy())
+            aspect_labels.extend(sample['y_aspects'].view(-1).cpu().numpy())
+            
+            # Calcola le probabilità e le previsioni per la polarità
+            polarity_probs = torch.softmax(polarity_logits, dim=1)
+            polarity_preds_batch = torch.argmax(polarity_probs, dim=1)
+            polarity_preds.extend(polarity_preds_batch.cpu().numpy())
+            polarity_labels.extend(sample['y_polarities'].view(-1).cpu().numpy())
 
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
     # Calcola le metriche di valutazione
     all_preds = [parameters['lang'].id2label[id] for id in all_preds]
     all_labels = [parameters['lang'].id2label[id] for id in all_labels]
 
-    report = evaluate_ote(all_labels, all_preds) # (PRECISION, RECALL, F1)
-
+    report = evaluate(aspect_labels, polarity_labels, aspect_preds, polarity_preds) # (PRECISION, RECALL, F1)
+    print(report)
     return round(np.mean(losses), 3), report
+
+

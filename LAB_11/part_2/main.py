@@ -8,7 +8,6 @@ if __name__ == "__main__":
     #Wrtite the code to load the datasets and to run your functions
     # Print the results
     folds, test_loader, lang = load_dataset()
-    exit(0)
     grid_search_parameters = {
         'hidden_layer_size': [250, 300, 350],
         'embedding_layer_size': [250, 300, 350],
@@ -17,28 +16,26 @@ if __name__ == "__main__":
     }
 
     parameters = {
-            'task': 'Aspect Based Sentiment Analysis',
+            'task': 'ABSA',
             'clip':5,
             'n_splits':10,
-            'output_size':lang.label_size,
             'optimizer':'Adam',
             'dropout': 0.10,
-            'hidden_layer_size': 512,
-            'embedding_layer_size': 512,
             'learning_rate': 0.001,
-            'bidirectional': True,
             'grid_search':False,
             'grid_search_parameters': grid_search_parameters,
-            'vocab_size': lang.vocab_size,
             'criterion':nn.CrossEntropyLoss(),
+            'lang':lang,
+            'output_aspects':len(lang.aspect2id),
+            'output_polarities':len(lang.pol2id),
+            'vocab_size': lang.vocab_size,
             'train_folds':folds,
-            'test_loader':test_loader,
-            'lang':lang
+            'test_loader':test_loader
         }
     
     model, training_report = train_model(parameters)
     print('\nOutput:\n',tabulate(training_report, headers='keys', tablefmt='grid', showindex=True))
-    # Unisci i DataFrame utilizzando l'indice 'Fold'
+
     combined_report = pd.concat([training_report.sort_index()], axis=1)
 
 

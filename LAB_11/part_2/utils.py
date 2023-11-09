@@ -8,9 +8,11 @@ from nltk.sentiment.util import mark_negation
 from sklearn.model_selection import KFold
 from nltk.sentiment import SentimentIntensityAnalyzer
 import torch.utils.data as data
+
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from nltk.sentiment.util import mark_negation
+from transformers import BertTokenizer
 
 nltk.download('vader_lexicon')
 nltk.download('sentiwordnet')
@@ -40,41 +42,37 @@ def read_file(file_path):
 
 def process_raw_data(dataset):
     new_dataset = []
-    #stop_words = set(stopwords.words('english'))
-    #lemmatizer = WordNetLemmatizer()
 
     for sample in dataset:
         if sample:
             raw_sent, words_tagged = sample.split('####')
             words_tagged = words_tagged.split()
-            labels = [w.split('=')[1] for w in words_tagged]
-            words = [w.split('=')[0] for w in words_tagged]
-            
-            # Tokenizzazione e conversione in minuscolo
-            
-            # Estrazione degli aspetti (prima della rimozione delle stop words e della lemmatizzazione)
-            vscore = sia.polarity_scores(' '.join(tokens))['compound']
-            if vscore <= -0.6:
-                vscore = 'VNEG'  # Molto negativo
-            elif vscore <= -0.2:
-                vscore = 'NEG'  # Negativo
-            elif vscore <= 0.2:
-                vscore = 'NET'  # Neutrale
-            elif vscore <= 0.6:
-                vscore = 'POS'  # Positivo
-            else:
-                vscore = 'VPOS'  # Molto positivo        
 
-            tokens = [word.lower() for word in words if word.isalpha()]
+            aspect_tags = []
+            pol_tags = []
+            text = []
+            for w in words_tagged:
 
-            # Rimozione delle stop words e lemmatizzazione
-            #tokens = [lemmatizer.lemmatize(word) for word in tokens ]#if word not in stop_words]
-            
-            # Gestione della negazione
-            tokens = mark_negation(tokens)
+                if w.startswith('=='):
+                    word = '='
+                    tag = w[2:]
+                else:
+                    word, tag = w.rsplit('=', 1)
+                if tag != 'O' and tag != 'ASPECT0' and tag != '':
+                    aspect_tag, pol_tag = tag.split('-')
+                else:
+                    aspect_tag = 'O'
+                    pol_tag = 'O'
 
-            new_dataset.append((tokens, vscore, labels))
+                aspect_tags.append(aspect_tag)
+                pol_tags.append(pol_tag)
+                text.append(word)
+            print('sample text:', text)
+            print('sample aspc:', aspect_tags)
+            print('sample pola:', pol_tags)
+            text = ' '.join(text)    
 
+            new_dataset.append((text, aspect_tags, pol_tags))
     return new_dataset
 
 
@@ -87,11 +85,10 @@ def load_dataset():
     train_set = process_raw_data(train_raw)
     test_set = process_raw_data(test_raw)
 
-    sents = [el[0] for el in train_set]
-    vscores = [el[1] for el in train_set]
-    labels = [el[2] for el in train_set]
+    aspect_labels = [el[1] for el in train_set]
+    pol_labels = [el[2] for el in train_set]
 
-    lang = Lang(sents, vscores, labels)
+    lang = Lang(aspect_labels, pol_labels)
 
     skf = KFold(n_splits=10, random_state=42, shuffle = True)
 
@@ -116,51 +113,42 @@ def load_dataset():
 
 
     print(' - Raw sent:', train_raw[0])
-    print(' - Training sents:', len(train_raw))
-    print(f' - Training len:', len(train_set))
+    print(' - Raw training samples:', len(train_raw))
+    print(' - Preprocessed training len:', len(train_set))
     print(' - Training dataset:', len(train_dataset))
     print(' - Test sents:', len(test_raw))
     print(f' - Test len:', len(test_set))
     print(' - Test dataset:', len(test_dataset))
     print(f' - Training len:', len(train_set))
-    print(f' - Labels', lang.label2id)
     print(f' - Train sample:', train_set[0])
     print(f' - Train dataset sample:', train_dataset[0])
-
     print(f' - Test sample:', test_set[0])
     print(f' - Test dataset sample:', test_dataset[0])
     print('Dataset loaded.\n\n')
+
     return fold_datasets, test_loader, lang
     
 class Lang:
-    def __init__(self, sents, vlabels, labels):
-        
-        self.word2id = self.mapping_seq(sents, special_token = True)
-        self.id2word = {id: word for word, id in self.word2id.items()}
+    def __init__(self, aspect_lbs, pol_lbs):
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
-        self.vlabel2id = self.mapping_seq(vlabels, special_token=False)
-        self.id2vlabel = {id : vlabel for vlabel, id in self.id2vlabel}
+        self.cls_token_id = self.tokenizer.cls_token_id
+        self.sep_token_id = self.tokenizer.sep_token_id
 
-        self.label2id = self.mapping_seq(labels, special_token = False)
-        self.id2label = {id: label for label, id in self.label2id.items()}
+        self.aspect2id = self.mapping_seq(aspect_lbs, special_token = False)
+        self.id2aspect = {id: label for label, id in self.aspect2id.items()}
 
-        self.vocab_size = len(self.word2id)
-        self.label_size = len(self.label2id)
+        self.pol2id = self.mapping_seq(pol_lbs, special_token = False)
+        self.id2pol = {id: label for label, id in self.pol2id.items()}
 
-        print(' - Labels:', self.label2id)
-        print(' - Vader labels:', self.vlabel2id)
+        self.vocab_size = len(self.tokenizer.vocab)
+        self.aspects = len(self.aspect2id)
+        self.polarities = len(self.pol2id)
 
-    def encode_sent(self, sentence):
-        return [self.word2id.get(word, UNK_TOKEN) for word in sentence]
-
-    def decode_sent(self, sentence_ids):
-        return [self.id2word[id] for id in sentence_ids]
-    
-    def encode_labels(self, sentence):
-        return [self.label2id.get(word, UNK_TOKEN) for word in sentence]
-
-    def decode_labels(self, sentence_ids):
-        return [self.id2label[id] for id in sentence_ids]
+        print(' - Aspects labels :', self.aspect2id)
+        print(' - Polarity labels:', self.pol2id)
+        print(' - Vocabulary size:', self.vocab_size)
+        print(' - Special tokens (CLS e SEP ids):', self.cls_token_id, self.sep_token_id)
     
     def mapping_seq(self, seqs, special_token = False):
         vocab = {}
@@ -178,68 +166,127 @@ class Lang:
         return vocab
     
 class Dataset(data.Dataset):
-    def __init__(self, samples, lang):
-        self.samples = samples
+    def __init__(self, dataset, lang):
         self.lang = lang
+        self.utt_ids, self.asp_ids, self.pol_ids,  self.attention_masks, self.token_types = self.prepare_data(dataset)
         self.first = True
 
+    def prepare_data(self, dataset):
+
+        utt_ids = []
+        asp_ids = []
+        pol_ids = []
+        attention_masks = []
+        token_types = []
+
+        for i, entry in enumerate(dataset):
+            # Tokenization
+            tokenized_entry = self.lang.tokenizer(entry[0])
+            input_ids = tokenized_entry['input_ids']
+            aligned_pol_ids = self.align_tags(entry[2], entry[0].split())
+            aligned_asp_ids = self.align_tags(entry[1], entry[0].split())
+            if INFO_ENABLED:
+                print('----------------------------- Sample ', i, '-----------------------------')
+                print('- Sent          :', entry[0])
+                print('- Aspects       :', entry[1])
+                print('- Polarities    :', entry[2])
+                print('- Sent encoded  :', input_ids)
+                print('- Asp. encoded  :', aligned_asp_ids)
+                print('- Pol. encoded  :', aligned_pol_ids)
+                print('- Token type ids:', tokenized_entry['token_type_ids'])
+                print('- Attention mask:', tokenized_entry['attention_mask'])
+
+
+            utt_ids.append(input_ids)
+            asp_ids.append(aligned_asp_ids)
+            pol_ids.append(aligned_pol_ids)
+            attention_masks.append(tokenized_entry['attention_mask'])
+            token_types.append(tokenized_entry['token_type_ids'])
+
+            # Verify dimensionality
+            assert len(input_ids) == len(aligned_asp_ids) == len(aligned_pol_ids) == len(tokenized_entry['attention_mask']) == len(tokenized_entry['token_type_ids'])
+            assert input_ids[0] == self.lang.cls_token_id and input_ids[-1] == self.lang.sep_token_id
+
+        return utt_ids, asp_ids, pol_ids, attention_masks, token_types
+    
+    def align_tags(self, tags, words):
+        aligned_tags = [self.lang.aspect2id['O']]
+        tag_pointer = 0
+        bert_tokenize_phrase = []
+        for word in words:
+            first = True    
+            sub_tokens = self.lang.tokenizer.tokenize(word)
+            for tok in sub_tokens:
+                base_label = tags[tag_pointer].replace('I-','PREFIX').replace('B-','PREFIX')
+                if first:
+                    slot_id = self.lang.aspect2id.get(base_label.replace('PREFIX', 'B-'), UNK_TOKEN)
+                else:
+                    slot_id = self.lang.aspect2id.get(base_label.replace('PREFIX', 'I-'), UNK_TOKEN)
+                aligned_tags.append(slot_id)
+                bert_tokenize_phrase.append(tok)
+            tag_pointer += 1
+
+        aligned_tags.append(self.lang.aspect2id['O'])
+        if INFO_ENABLED:
+            print('-  Bert Tokens  :', bert_tokenize_phrase)
+
+        return aligned_tags
+    
     def __len__(self):
-        return len(self.samples)
+        return len(self.utt_ids)
 
     def __getitem__(self, idx):
-        sentence, aspects, labels  = self.samples[idx]
-        encoded_sentence = self.lang.encode_sent(sentence)
-        encoded_labels = self.lang.encode_labels(labels)
-
-        tensor_sentence = torch.LongTensor(encoded_sentence)
-        tensor_labels = torch.LongTensor(encoded_labels)
-        
-        if self.first and INFO_ENABLED:
-            print('- Sample')
-            print('-- Sentence:', sentence)
-            print('-- Encoded :', encoded_sentence)
-            print('-- Label:', labels)
-            print('-- Encoded:', encoded_labels)
-            self.first = False
-
-
-        return {'text':tensor_sentence, 'label':tensor_labels}
+        return {
+            'text': torch.tensor(self.utt_ids[idx]),
+            'aspects': torch.tensor(self.asp_ids[idx]),
+            'polarities': torch.tensor(self.pol_ids[idx]),
+            'attention_mask': torch.tensor(self.attention_masks[idx]),
+            'token_type_ids': torch.tensor(self.token_types[idx])
+        }
     
-
-def collate_fn(batch):
-
+BERT_MAX_LEN = 512
+def collate_fn(data):
     def merge(sequences):
         '''
         merge from batch * sent_len to batch * max_len 
         '''
-        lengths = [len(seq) for seq in sequences]
-        for i,l in enumerate(lengths):
-            if l == 0:
-                print(sequences[i])
-                exit(0)
+        lengths = [min(len(seq), BERT_MAX_LEN) for seq in sequences]  # Capture effective lengths but ensure they don't exceed 512
         max_len = 1 if max(lengths)==0 else max(lengths)
-
-        # Pad token is zero in our case
-        # So we create a matrix full of PAD_TOKEN (i.e. 0) with the shape 
-        # batch_size X maximum length of a sequence
         padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(PAD_TOKEN)
+        
         for i, seq in enumerate(sequences):
-            end = lengths[i]
-            padded_seqs[i, :end] = seq # We copy each sequence into the matrix
+            end = lengths[i]  # Use the effective length for padding
+            padded_seqs[i, :end] = seq[:end]
 
-        padded_seqs = padded_seqs.detach()  # We remove these tensors from the computational graph
+        padded_seqs = padded_seqs.detach()
         return padded_seqs, lengths
-
+    
+    data.sort(key=lambda x: len(x['text']), reverse=True)
     new_item = {}
-    for key in batch[0].keys():
-        new_item[key] = [el[key] for el in batch]
+    for key in data[0].keys():
+        new_item[key] = [d[key] for d in data]
 
-    source, lengths = merge(new_item['text'])
-    labels, _ = merge(new_item['label'])
+    text, y_lengths = merge(new_item['text'])
+    y_aspects, _ = merge(new_item["aspects"]) 
+    y_polarities, _ = merge(new_item["polarities"]) 
 
-    new_item['text'] = source.to(DEVICE)
-    new_item['labels'] = labels.to(DEVICE)
-    new_item['lengths'] = torch.LongTensor(lengths).to(DEVICE)
-    if INFO_ENABLED:
-        print('COLLATEFN:',new_item['text'].shape, new_item['labels'].shape, new_item['lengths'].shape)
+    attention_mask, _ = merge(new_item['attention_mask'])
+    token_type_ids, _ = merge(new_item['token_type_ids'])
+
+    text = text.to(DEVICE)
+    y_aspects = y_aspects.to(DEVICE)
+    y_polarities = y_polarities.to(DEVICE)
+    y_lengths = torch.LongTensor(y_lengths).to(DEVICE)
+    attention_mask = attention_mask.to(DEVICE)
+    token_type_ids = token_type_ids.to(DEVICE)
+
+    new_item["texts"] = text
+    new_item["y_aspects"] = y_aspects
+    new_item['y_polarities'] = y_polarities
+    new_item["tags_len"] = y_lengths
+    new_item["attention_mask"] = attention_mask
+    new_item['token_type_ids'] = token_type_ids
+
+    sample = {'utterances': text.shape, 'tags_len': y_lengths.shape, 'yaspects':y_aspects.shape, 'ypolarities':y_aspects.shape,'attention_mask':attention_mask.shape}
+    print('-   Collate_fn :', sample)
     return new_item
