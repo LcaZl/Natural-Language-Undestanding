@@ -25,7 +25,7 @@ def create_subj_filter(dataset, model, lang, subj_lang):
     with torch.no_grad():
         
         # Filtrare il train set
-        for sample in dataset:
+        for sample in tqdm(dataset):
 
             outputs = model(sample['text'], sample['vlabels'], sample['lengths'])
             predictions = torch.round(torch.sigmoid(outputs))

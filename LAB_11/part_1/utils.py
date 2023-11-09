@@ -23,11 +23,11 @@ from nltk.sentiment.vader import SentimentIntensityAnalyzer, VaderConstants
 from nltk.lm.preprocessing import flatten
 from nltk.sentiment import SentimentIntensityAnalyzer
 sia = SentimentIntensityAnalyzer()
-
+from tqdm import tqdm
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
-DEVICE = 'cpu'
+DEVICE = 'cuda:0'
 INFO_ENABLED = False
 MAX_VOCAB_SIZE = 10000
 
@@ -71,19 +71,16 @@ def filter_movie_reviews(filter):
     filter = set([' '.join(sentence) for sentence in filter])
 
     for category in categories:  # categories è una lista di categorie, ad es. ['neg', 'pos']
-        for fileid in movie_reviews.fileids(categories=category):
+        for fileid in tqdm(movie_reviews.fileids(categories=category)):
             # Unire tutte le frasi di un documento in una singola lista di token
             processed_doc = preprocess(movie_reviews.sents(fileid), label='neg', mark_neg=True, file_id=fileid)                
             new_doc = []
 
-            for tokens, vscore, label, doc_file_id in processed_doc:
-                sentence = ' '.join(tokens)
-                if sentence not in filter:
-                    new_doc.append(tokens)
-
+            new_doc = [tokens for tokens, vscore, label, doc_file_id in processed_doc if ' '.join(tokens) not in filter]
             # Unire le frasi rimanenti per creare un nuovo documento
             if new_doc:
-                new_mr[fileid] = [sent for sent in new_doc]
+                new_mr[fileid] = [tok for sent in new_doc for tok in sent]
+
     return new_mr
     
 def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
@@ -105,41 +102,30 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
         grp1_sentences = preprocess([list(flatten(doc)) for doc in mr.paras(categories='neg')], label = 'neg')
         grp2_sentences = preprocess([list(flatten(doc)) for doc in mr.paras(categories='pos')], label = 'pos')
 
-    elif dataset_name == 'Filtered_movie_reviews':
-
-        mr = filter_movie_reviews(args[0])
-
-
-        grp1_sentences = preprocess([mr[fileid] for fileid in movie_reviews.fileids(categories='pos')])
-        grp2_sentences = preprocess([mr[fileid] for fileid in movie_reviews.fileids(categories='pos')])
-
-        print(grp1_sentences[0])
-    elif dataset_name == 'Movie_reviews_4_Subj':
+    elif dataset_name == 'movie_review_4subjectivity': # List of all sent from movie review to be filtered
 
         mr = movie_reviews
         categories = mr.categories()
 
         all_sentences = []
-        print(' - Categories:', mr.categories())
     
-        for file_id in movie_reviews.fileids(categories='neg'):
+        for file_id in tqdm(movie_reviews.fileids(categories='neg')):
             all_sentences.extend(preprocess(movie_reviews.sents(file_id), 'neg', file_id=file_id))
-        for file_id in movie_reviews.fileids(categories='pos'):
+        for file_id in tqdm(movie_reviews.fileids(categories='pos')):
             all_sentences.extend(preprocess(movie_reviews.sents(file_id), 'pos', file_id=file_id))
 
-        
-       # grp1_sentences = [preprocess(movie_reviews.sents(file_id), 'neg', file_id=file_id) for file_id in movie_reviews.fileids(categories='neg') ]
-        #all_sentences = grp1_sentences + [preprocess(movie_reviews.sents(file_id), 'pos', file_id=file_id) for file_id in movie_reviews.fileids(categories='pos')]
-        print(all_sentences[:3])
-        args[0].extend_classes(categories)
+        args[0].extend_classes(categories) # Lang
         dataset = Dataset(all_sentences, args[0])
         dataloader = DataLoader(dataset, batch_size = 128, collate_fn = collate_fn)
-        print(' - Vocabulary size:', args[0])
-        print(' - all_sentences ',all_sentences[0][1])
-        print(' - Sentences:', len(all_sentences))
-        print('Datasets loaded!\n')
         return dataloader, None, args[0]
+    
+    elif dataset_name == 'movie_review_filtered':
 
+        mr = filter_movie_reviews(args[0])
+        categories = movie_reviews.categories()
+
+        grp1_sentences = preprocess([mr[fileid] for fileid in movie_reviews.fileids(categories='pos')], label = 'pos')
+        grp2_sentences = preprocess([mr[fileid] for fileid in movie_reviews.fileids(categories='neg')], label = 'neg')
     else:
         raise Exception('Dataset name not recognized.')
     
