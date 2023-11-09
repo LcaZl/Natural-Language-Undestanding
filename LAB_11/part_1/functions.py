@@ -27,18 +27,15 @@ def create_subj_filter(dataset, model, lang, subj_lang):
         # Filtrare il train set
         for sample in dataset:
 
-            #print(sample['text'].shape, sample['vlabels'].shape, sample['lengths'].shape,'\n',sample)
             outputs = model(sample['text'], sample['vlabels'], sample['lengths'])
             predictions = torch.round(torch.sigmoid(outputs))
             subjective_mask = predictions.view(-1) == 1
 
-            new_raw_elements = []
             for i in range(sample['text'].size(0)):
                 if subj_lang.id2class[subjective_mask.tolist()[i]] == REMOVE_CLASS:
 
                     decoded_text = lang.decode(sample['text'][i].tolist())[:sample['lengths'][i].item()]
-                    new_raw_elements.append(decoded_text)
-            filter.extend(decoded_text)
+                    filter.append(decoded_text)
 
     return filter
 

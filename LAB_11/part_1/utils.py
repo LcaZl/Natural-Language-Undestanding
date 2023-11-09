@@ -31,7 +31,7 @@ DEVICE = 'cpu'
 INFO_ENABLED = False
 MAX_VOCAB_SIZE = 10000
 
-def preprocess(dataset, label, mark_neg = True, file_id = 0, file_pos = 0):
+def preprocess(dataset, label, mark_neg = True, file_id = 0):
     new_dataset = []
     for sent in dataset:
         text = ' '.join(sent)
@@ -59,10 +59,33 @@ def preprocess(dataset, label, mark_neg = True, file_id = 0, file_pos = 0):
             tokens = mark_negation(tokens)
 
         if len(tokens) != 0:
-            new_dataset.append((tokens, vscore, label, file_id, file_pos))
+            new_dataset.append((tokens, vscore, label, file_id))
         
     return new_dataset
 
+def filter_movie_reviews(filter):
+    mr = movie_reviews
+    new_mr = {}
+    categories = mr.categories()
+
+    filter = set([' '.join(sentence) for sentence in filter])
+
+    for category in categories:  # categories è una lista di categorie, ad es. ['neg', 'pos']
+        for fileid in movie_reviews.fileids(categories=category):
+            # Unire tutte le frasi di un documento in una singola lista di token
+            processed_doc = preprocess(movie_reviews.sents(fileid), label='neg', mark_neg=True, file_id=fileid)                
+            new_doc = []
+
+            for tokens, vscore, label, doc_file_id in processed_doc:
+                sentence = ' '.join(tokens)
+                if sentence not in filter:
+                    new_doc.append(tokens)
+
+            # Unire le frasi rimanenti per creare un nuovo documento
+            if new_doc:
+                new_mr[fileid] = [sent for sent in new_doc]
+    return new_mr
+    
 def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
     print(f'Loading Dataset {dataset_name}...')
 
@@ -84,20 +107,13 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
     elif dataset_name == 'Filtered_movie_reviews':
 
-        mr = movie_reviews
-        filter = args[0]
-        new_mr = {}
-        for doc in mr.paras(categories='neg'):
-            new_doc = []
-            for sent in doc:
-                print('sent', sent)
-                exit(0)
-        #for doc in mr.paras(categories='pos'):
+        mr = filter_movie_reviews(args[0])
 
-        categories = mr.categories()
-        grp1_sentences = [(el, vscore, label) for el, label, vscore in args[0] if label == 'neg']
-        grp2_sentences = [(el, vscore, label) for el, label, vscore in args[0] if label == 'pos']
 
+        grp1_sentences = preprocess([mr[fileid] for fileid in movie_reviews.fileids(categories='pos')])
+        grp2_sentences = preprocess([mr[fileid] for fileid in movie_reviews.fileids(categories='pos')])
+
+        print(grp1_sentences[0])
     elif dataset_name == 'Movie_reviews_4_Subj':
 
         mr = movie_reviews
@@ -105,17 +121,24 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
         all_sentences = []
         print(' - Categories:', mr.categories())
-        grp1_sentences = [preprocess([sent], 'neg', file_id=file_id) for file_id in movie_reviews.fileids(categories='neg') for i, sent in movie_reviews.sents(file_id)]
-        all_sentences = grp1_sentences + [preprocess([sent], 'pos', file_id=file_id) for file_id in movie_reviews.fileids(categories='pos') for i, sent in movie_reviews.sents(file_id)]
-        print(all_sentences[0])
-        lang = Lang(all_sentences, categories)
-        dataset = Dataset(all_sentences, lang)
+    
+        for file_id in movie_reviews.fileids(categories='neg'):
+            all_sentences.extend(preprocess(movie_reviews.sents(file_id), 'neg', file_id=file_id))
+        for file_id in movie_reviews.fileids(categories='pos'):
+            all_sentences.extend(preprocess(movie_reviews.sents(file_id), 'pos', file_id=file_id))
+
+        
+       # grp1_sentences = [preprocess(movie_reviews.sents(file_id), 'neg', file_id=file_id) for file_id in movie_reviews.fileids(categories='neg') ]
+        #all_sentences = grp1_sentences + [preprocess(movie_reviews.sents(file_id), 'pos', file_id=file_id) for file_id in movie_reviews.fileids(categories='pos')]
+        print(all_sentences[:3])
+        args[0].extend_classes(categories)
+        dataset = Dataset(all_sentences, args[0])
         dataloader = DataLoader(dataset, batch_size = 128, collate_fn = collate_fn)
-        print(' - Vocabulary size:', lang.vocab_size)
+        print(' - Vocabulary size:', args[0])
         print(' - all_sentences ',all_sentences[0][1])
-        print(' - Sample:', dataset[0])
+        print(' - Sentences:', len(all_sentences))
         print('Datasets loaded!\n')
-        return dataloader, None, lang
+        return dataloader, None, args[0]
 
     else:
         raise Exception('Dataset name not recognized.')
@@ -128,7 +151,7 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
     # Build vocabulary
     lang = Lang(train_sentences, categories)
 
-    train_labels = [label for _, _, label, _, _ in train_sentences]
+    train_labels = [label for _, _, label, _ in train_sentences]
     fold_datasets = []  # This will store the dataset splits
     for k, (train_indices, val_indices) in enumerate(kfold.split(train_sentences, train_labels)):
         # Split the data into training and validation sets for the current fold
@@ -179,7 +202,13 @@ class Lang:
 
         self.id2class = {i:c for c, i in self.class2id.items()}
         print(' - Vader label ids:',self.vlabel2id)
-        print(' - Classes label ids:',self.vlabel2id)
+        print(' - Classes label ids:',self.class2id)
+
+    def extend_classes(self, cls):
+        for cl in cls:
+            self.class2id[cl] = len(self.class2id)
+
+        self.id2class = {i:c for c, i in self.class2id.items()}
 
     def encode(self, sentence):
         return [self.word2id.get(word, UNK_TOKEN) for word in sentence]

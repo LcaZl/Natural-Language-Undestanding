@@ -108,9 +108,12 @@ if __name__ == "__main__":
     pol_model, pol_training_report = train_model(training_parameters['polarity_model'])
     print('\nOutput:\n',tabulate(pol_training_report, headers='keys', tablefmt='grid', showindex=True))
 
-    print('\nFiltering subjective sentences of movie review dataset ...\n')
-    mr4subj_fold_dataset, _, mr4subj_lang = load_dataset('Movie_reviews_4_Subj', skf, test_size)
+    print('\nStart filtering subjective sentences of movie review dataset ...\n')
+    mr4subj_fold_dataset, _, mr4subj_lang = load_dataset('Movie_reviews_4_Subj', skf, test_size, args = [subj_lang])
+
+    print('\nCreating filter ...')
     filter = create_subj_filter(mr4subj_fold_dataset, subj_model, mr_lang, subj_lang)
+
     print(filter[:5])
     mr2_fold_dataset, mr2_test, mr2_lang = load_dataset('Filtered_movie_reviews', skf, test_size, args = [filter])
 
