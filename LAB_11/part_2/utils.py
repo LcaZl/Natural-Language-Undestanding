@@ -28,7 +28,7 @@ sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
-DEVICE = 'cuda:0'
+DEVICE = 'cpu'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
 INFO_ENABLED = True
@@ -52,23 +52,61 @@ def process_raw_data(dataset):
             aspect_tags = []
             pol_tags = []
             text = []
-            for w in words_tagged:
+            is_in_aspect = False
+            aspect_start_index = -1
 
+            for i, w in enumerate(words_tagged):
                 word, tag = w.rsplit('=', 1)
 
                 if tag != 'O' and tag != 'ASPECT0' and tag != '':
                     aspect_tag, pol_tag = tag.split('-')
+                    if aspect_tag == 'T':
+                        if not is_in_aspect:
+                            is_in_aspect = True
+                            aspect_start_index = i
+                            aspect_tags.append('B')  # Inizio di un aspetto
+                        else:
+                            aspect_tags.append('I')  # Continuazione di un aspetto
+                    else:
+                        if is_in_aspect:
+                            # Fine dell'aspetto corrente
+                            if aspect_start_index == i - 1:
+                                aspect_tags[i] = 'S'  # Singolo termine di aspetto
+                            else:
+                                aspect_tags[i] = 'E'  # Fine di un aspetto multi-token
+                            pol_tags.append((aspect_start_index, i-1, pol_tag))
+                            is_in_aspect = False
+                        aspect_tags.append('O')
                 else:
-                    aspect_tag = 'O'
-                    pol_tag = 'NEU'
+                    if is_in_aspect:
+                        # Fine dell'aspetto corrente
+                        if aspect_start_index == i - 1:
+                            aspect_tags[-1] = 'S'
+                        else:
+                            aspect_tags[-1] = 'E'
+                        pol_tags.append((aspect_start_index, i-1, pol_tag))  # Presumiamo NEU se non specificato
+                        is_in_aspect = False
+                    aspect_tags.append('O')
 
-                aspect_tags.append(aspect_tag)
-                pol_tags.append(pol_tag)
                 text.append(word)
-            text = ' '.join(text)    
 
+            # Controlla se il sample finisce con un aspetto
+            if is_in_aspect:
+                if aspect_start_index == len(words_tagged) - 1:
+                    aspect_tags[-1] = 'S'
+                else:
+                    aspect_tags[-1] = 'E'
+                pol_tags.append((aspect_start_index, len(words_tagged) - 1, pol_tag))  # Presumiamo NEU se non specificato
+
+            text = ' '.join(text)
             new_dataset.append((text, aspect_tags, pol_tags))
+            if not INFO_ENABLED:
+                print('- Raw       :', words_tagged)
+                print('- Text      :', text)
+                print('- Aspects   :', aspect_tags)
+                print('- Polarities:', pol_tags, '\n')    
     return new_dataset
+
 
 
 def load_dataset():
@@ -182,8 +220,8 @@ class Dataset(data.Dataset):
             # Tokenization
             tokenized_entry = self.lang.tokenizer(entry[0])
             input_ids = tokenized_entry['input_ids']
-            aligned_pol_ids = self.align_tags(entry[2], entry[0].split())
-            aligned_asp_ids = self.align_tags(entry[1], entry[0].split())
+            aligned_asp_ids, aligned_pol_ids = self.align_tags(entry[1], entry[2], entry[0].split(), input_ids)
+
             if INFO_ENABLED:
                 print('----------------------------- Sample ', i, '-----------------------------')
                 print('- Sent          :', entry[0])
@@ -203,33 +241,67 @@ class Dataset(data.Dataset):
             token_types.append(tokenized_entry['token_type_ids'])
 
             # Verify dimensionality
-            assert len(input_ids) == len(aligned_asp_ids) == len(aligned_pol_ids) == len(tokenized_entry['attention_mask']) == len(tokenized_entry['token_type_ids'])
+            assert len(input_ids) == len(aligned_asp_ids) == len(tokenized_entry['attention_mask']) == len(tokenized_entry['token_type_ids'])
             assert input_ids[0] == self.lang.cls_token_id and input_ids[-1] == self.lang.sep_token_id
+            for pol in aligned_pol_ids:
+                if pol[0] == pol[1]:
+                    assert aligned_asp_ids[pol[0]] == 'S' and aligned_asp_ids[pol[1]] == 'S'
+                else:
+                    assert pol[0] < pol[1]
+                    assert aligned_asp_ids[pol[0]] == 'B' and aligned_asp_ids[pol[1]] == 'E'
+                    if pol[1] - pol[0] >> 1:
+                        for asp_id in aligned_asp_ids[pol[0] + 1: pol[1] - 1]:
+                            assert asp_id == 'I' 
 
         return utt_ids, asp_ids, pol_ids, attention_masks, token_types
     
-    def align_tags(self, tags, words):
-        aligned_tags = [self.lang.aspect2id['O']]
-        tag_pointer = 0
-        bert_tokenize_phrase = []
-        for word in words:
-            first = True    
+    def align_tags(self, aspect_tags, pol_tags, words, input_ids):
+        aligned_aspects = ['O'] * len(input_ids)  # Default 'O' for all tokens
+        aligned_polarities = []
+        current_aspect = 'O'
+        aspect_start = None
+        token_idx = 1  # Start from 1 to skip [CLS] token
+        pol_idx = 0
+
+        for word, aspect in zip(words, aspect_tags):
             sub_tokens = self.lang.tokenizer.tokenize(word)
-            for tok in sub_tokens:
-                base_label = tags[tag_pointer].replace('I-','PREFIX').replace('B-','PREFIX')
-                if first:
-                    slot_id = self.lang.aspect2id.get(base_label.replace('PREFIX', 'B-'), UNK_TOKEN)
-                else:
-                    slot_id = self.lang.aspect2id.get(base_label.replace('PREFIX', 'I-'), UNK_TOKEN)
-                aligned_tags.append(slot_id)
-                bert_tokenize_phrase.append(tok)
-            tag_pointer += 1
+            for sub_token in sub_tokens:
+                
+                if token_idx < len(input_ids) - 1:  # Skip [SEP] token
+                    aligned_aspects[token_idx] = aspect
+                    if aspect != 'O':
+                        if current_aspect == 'O':  # Start of a new aspect
+                            aspect_start = token_idx
+                            aspect_sent = pol_tags[pol_idx][2]
+                            pol_idx += 1                            
+                        current_aspect = aspect
+                    elif current_aspect != 'O':  # End of the current aspect
+                        end_idx = token_idx - 1 if aspect_start != token_idx - 1 else aspect_start
+                        aligned_polarities.append((aspect_start, end_idx, aspect_sent))
+                        current_aspect = 'O'
+                    token_idx += 1
 
-        aligned_tags.append(self.lang.aspect2id['O'])
-        if INFO_ENABLED:
-            print('-  Bert Tokens  :', bert_tokenize_phrase)
+        in_aspect = False
+        for idx, asp in enumerate(aligned_aspects):
+            if idx != len(aligned_aspects):
+                if in_aspect and asp != 'E':
+                    aligned_aspects[idx] = 'I'
+                if asp == 'B':
+                    in_aspect = True
+                if asp == 'E':
+                    in_aspect = False
 
-        return aligned_tags
+        GESTIRE SSSSSSSSS
+
+        
+        # Check if the last aspect extends to the end
+        if current_aspect != 'O':
+            end_idx = token_idx - 1 if aspect_start != token_idx - 1 else aspect_start
+            for pol_start, pol_end, sentiment in pol_tags:
+                if pol_start == aspect_start and pol_end == end_idx:
+                    aligned_polarities.append((aspect_start, end_idx, sentiment))
+
+        return aligned_aspects, aligned_polarities
     
     def __len__(self):
         return len(self.utt_ids)
