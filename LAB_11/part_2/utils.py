@@ -291,15 +291,19 @@ class Dataset(data.Dataset):
                 if asp == 'E':
                     in_aspect = False
 
-        GESTIRE SSSSSSSSS
+        in_aspect = False
+        for idx, asp in enumerate(aligned_aspects):
+            if idx != len(aligned_aspects):
+                if asp not in ['O','B','I','E']:
+                    if not in_aspect and asp == 'S' and aligned_aspects[idx + 1] == 'S': 
+                        in_aspect = True
+                        aligned_aspects[idx] = 'B'
+                    elif in_aspect and asp == 'S' and aligned_aspects[idx + 1] == 'S':
+                        aligned_aspects[idx] = 'I'
+                    elif in_aspect and asp == 'S' and not aligned_aspects[idx + 1] == 'S':
+                        aligned_aspects[idx] = 'E'
+                        in_aspect = False
 
-        
-        # Check if the last aspect extends to the end
-        if current_aspect != 'O':
-            end_idx = token_idx - 1 if aspect_start != token_idx - 1 else aspect_start
-            for pol_start, pol_end, sentiment in pol_tags:
-                if pol_start == aspect_start and pol_end == end_idx:
-                    aligned_polarities.append((aspect_start, end_idx, sentiment))
 
         return aligned_aspects, aligned_polarities
     

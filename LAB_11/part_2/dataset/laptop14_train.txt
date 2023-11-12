@@ -16,7 +16,7 @@ I took it back for an Asus and same thing- blue screen which required me to remo
 In the shop, these MacBooks are encased in a soft rubber enclosure - so you will never know about the razor edge until you buy it, get it home, break the seal and use it (very clever con).####In=O the=O shop=O ,=O these=O MacBooks=O are=O encased=O in=O a=O soft=O rubber=T-POS enclosure=T-POS ,=O so=O you=O will=O never=O know=O about=O the=O razor=O edge=T-NEG until=O you=O buy=O it=O ,=O get=O it=O home=O ,=O break=O the=O seal=O and=O use=O it=O very=O clever=O con=O .=O
 However, the multi-touch gestures and large tracking area make having an external mouse unnecessary (unless you're gaming).####However=O ,=O the=O multi-touch=T-POS gestures=T-POS and=O large=O tracking=T-POS area=T-POS make=O having=O an=O external=T-NEU mouse=T-NEU unnecessary=O unless=O you=O 're=O gaming=T-NEU .=O
 Plus it is small and reasonably light so I can take it with me to and from work.####Plus=O it=O is=O small=O and=O reasonably=O light=O so=O I=O can=O take=O it=O with=O me=O to=O and=O from=O work=O .=O
-I HATE this one.####I=O HATE=O this=O one=O .=O
+I HATE this one.####I=O HATE=O this=O one=O .=T-POS
 They were totally unconcerned that the computer was not correctly repaired in the first place.####They=O were=O totally=O unconcerned=O that=O the=O computer=O was=O not=O correctly=O repaired=O in=O the=O first=O place=O .=O
 Toshiba does not send any one out unless you have paid extra to have the on site repair done.####Toshiba=O does=O not=O send=O any=O one=O out=O unless=O you=O have=O paid=O extra=O to=O have=O the=O on=O site=O repair=O done=O .=O
 Oh, boy!####Oh=O ,=O boy=O !=O
