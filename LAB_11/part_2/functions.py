@@ -159,8 +159,8 @@ def eval_loop(data_loader, model, parameters):
             # Ora calcola le probabilità e le predizioni solo per i token attivi
             aspect_probs = torch.softmax(active_aspect_logits, dim=1)
             aspect_preds_batch = torch.argmax(aspect_probs, dim=1)
-            aspect_preds.extend(aspect_preds_batch.cpu().numpy())
-            aspect_labels.extend(active_aspect_labels.cpu().numpy())
+            aspect_preds.extend(parameters['lang'].decode_aspects(aspect_preds_batch.cpu().numpy()))
+            aspect_labels.extend(parameters['lang'].decode_aspects(active_aspect_labels.cpu().numpy()))
 
             polarity_probs = torch.softmax(active_polarity_logits, dim=1)
             polarity_preds_batch = torch.argmax(polarity_probs, dim=1)

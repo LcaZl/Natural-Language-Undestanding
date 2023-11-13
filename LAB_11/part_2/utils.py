@@ -28,10 +28,10 @@ sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
-DEVICE = 'cpu'
+DEVICE = 'cuda:0'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
-INFO_ENABLED = True
+INFO_ENABLED = False
 BERT_MAX_LEN = 512
 
 def read_file(file_path):
@@ -123,11 +123,11 @@ def load_dataset():
     skf = KFold(n_splits=10, random_state=42, shuffle = True)
 
     fold_datasets = []  # This will store the dataset splits
-
-    for k, (train_indices, val_indices) in enumerate(skf.split(train_set)):
-
+    pbar = tqdm(enumerate(skf.split(train_set)))
+    for k, (train_indices, val_indices) in pbar:
         train_samples = [train_set[idx] for idx in train_indices]
         val_samples = [train_set[idx] for idx in val_indices]
+        pbar.set_description(f' - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
 
         train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
@@ -136,7 +136,7 @@ def load_dataset():
         val_loader = DataLoader(val_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
         
         fold_datasets.append((train_loader, val_loader))
-        print(f' - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
+        pbar.update(1)
 
     test_dataset = Dataset(test_set, lang)
     test_loader = DataLoader(test_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
@@ -169,20 +169,21 @@ class Lang:
         self.id2aspect = {id: label for label, id in self.aspect2id.items()}
 
         self.pol2id = {'O':0, 'NEG':1, 'POS':2, 'NEU':3, '[PAD]':PAD_TOKEN}
+        self.id2pol = {id: label for label, id in self.pol2id.items()}
         self.vocab_size = len(self.tokenizer.vocab)
         self.aspects = len(self.aspect2id)
         
-    def encode_aspects(self, aspects):
-        encoded_asp = []
+    def decode_aspects(self, aspects):
+        decoded_asp = []
         for aspect in aspects:
-            encoded_asp.append(self.aspect2id[aspect])
-        return encoded_asp
+            decoded_asp.append(self.id2aspect[aspect])
+        return decoded_asp
     
-    def encode_polarities(self, polarities):
-        encoded_pol = []
+    def decode_polarities(self, polarities):
+        decoded_pol = []
         for pol in polarities:
-            encoded_pol.append(self.pol2id[pol])
-        return encoded_pol
+            decoded_pol.append(self.id2pol[pol])
+        return decoded_pol
     
 class Dataset(data.Dataset):
     def __init__(self, dataset, lang):
@@ -270,7 +271,8 @@ class Dataset(data.Dataset):
                         current_aspect = 'O'
                     token_idx += 1
 
-        print('- Aspects before encode:', aligned_aspects)
+        if INFO_ENABLED:
+            print('- Aspects before encode:', aligned_aspects)
 
         in_aspect = False
         for idx, asp in enumerate(aligned_aspects):

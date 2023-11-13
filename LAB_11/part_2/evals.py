@@ -53,6 +53,41 @@ def evaluate_ote(gold_ot, pred_ot):
     ote_scores = (ot_precision, ot_recall, ot_f1)
     return ote_scores
 
+def tag2ts(ts_tag_sequence):
+    """
+    transform ts tag sequence to targeted sentiment
+    :param ts_tag_sequence: tag sequence for ts task
+    :return:
+    """
+    n_tags = len(ts_tag_sequence)
+    ts_sequence, sentiments = [], []
+    beg, end = -1, -1
+    for i in range(n_tags):
+        ts_tag = ts_tag_sequence[i]
+        # current position and sentiment
+        eles = ts_tag.split('-')
+        if len(eles) == 2:
+            pos, sentiment = eles
+        else:
+            pos, sentiment = 'O', 'O'
+        if sentiment != 'O':
+            # current word is a subjective word
+            sentiments.append(sentiment)
+        if pos == 'S':
+            # singleton
+            ts_sequence.append((i, i, sentiment))
+            sentiments = []
+        elif pos == 'B':
+            beg = i
+        elif pos == 'E':
+            end = i
+            # schema1: only the consistent sentiment tags are accepted
+            # that is, all of the sentiment tags are the same
+            if end > beg > -1 and len(set(sentiments)) == 1:
+                ts_sequence.append((beg, end, sentiment))
+                sentiments = []
+                beg, end = -1, -1
+    return ts_sequence
 
 def evaluate_ts(gold_ts, pred_ts):
     """
