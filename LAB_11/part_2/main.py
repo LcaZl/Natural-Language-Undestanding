@@ -24,10 +24,10 @@ if __name__ == "__main__":
             'learning_rate': 0.001,
             'grid_search':False,
             'grid_search_parameters': grid_search_parameters,
-            'criterion':nn.CrossEntropyLoss(),
+            'criterion':nn.CrossEntropyLoss(ignore_index = PAD_TOKEN),
             'lang':lang,
-            'output_aspects':len(lang.aspect2id),
-            'output_polarities':len(lang.pol2id),
+            'output_aspects': lang.aspect_labels,
+            'output_polarities':lang.polarity_labels,
             'vocab_size': lang.vocab_size,
             'train_folds':folds,
             'test_loader':test_loader

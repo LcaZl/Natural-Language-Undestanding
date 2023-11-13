@@ -18,9 +18,9 @@ from evals import *
 
 def init_model(parameters, model_state = None):
 
-    model = jointBERT(
-        output_aspects=parameters['output_aspects'],
-        output_polarities = parameters['output_polarities']
+    model = AspectSentimentModel(
+        num_aspect_labels=parameters['output_aspects'],
+        num_polarity_labels = parameters['output_polarities']
     ).to(DEVICE)
 
     if model_state:
@@ -121,9 +121,12 @@ def train_loop(data_loader, optimizer, model, parameters):
 
         optimizer.zero_grad()
         aspect_logits, polarity_logits = model(sample['texts'], sample['attention_mask'], None)
+
         aspect_loss = parameters['criterion'](aspect_logits.view(-1, aspect_logits.shape[-1]), sample['y_aspects'].view(-1))
         polarity_loss = parameters['criterion'](polarity_logits.view(-1, polarity_logits.shape[-1]), sample['y_polarities'].view(-1))
         loss = aspect_loss + polarity_loss  # Considera di pesare diversamente le due loss se necessario
+        print('Aspect - Polarity - Total Loss:', aspect_loss, polarity_loss, loss)
+
         losses.append(loss.item())
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
@@ -153,6 +156,9 @@ def eval_loop(data_loader, model, parameters):
             active_aspect_logits = aspect_logits.view(-1, aspect_logits.shape[-1])[active_mask]
             active_polarity_logits = polarity_logits.view(-1, polarity_logits.shape[-1])[active_mask]
 
+            print('- Active aspect logits:', active_aspect_logits)
+            print('- Active polarity logi:', active_polarity_logits)
+
             active_aspect_labels = sample['y_aspects'].view(-1)[active_mask]
             active_polarity_labels = sample['asp_pol_ids'][1:-1]
 
@@ -166,6 +172,11 @@ def eval_loop(data_loader, model, parameters):
             polarity_preds_batch = torch.argmax(polarity_probs, dim=1)
             polarity_preds.extend(polarity_preds_batch)
             polarity_labels.extend(active_polarity_labels)
+
+    print('- aspect_labels', aspect_labels[0])
+    print('- polarity_labels', polarity_labels[0])
+    print('- aspect_preds', aspect_preds[0])
+    print('- polarity_preds', polarity_preds[0])
 
     report = evaluate(aspect_labels, polarity_labels, aspect_preds, polarity_preds) # (PRECISION, RECALL, F1)
     print('evaluate report:', report)

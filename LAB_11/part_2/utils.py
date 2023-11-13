@@ -28,7 +28,7 @@ sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
-DEVICE = 'cuda:0'
+DEVICE = 'cpu'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
 INFO_ENABLED = False
@@ -45,66 +45,53 @@ def process_raw_data(dataset):
     new_dataset = []
 
     for sample in dataset:
-        if sample:
-            raw_sent, words_tagged = sample.split('####')
+
+        if sample: 
+
+            _, words_tagged = sample.split('####')
             words_tagged = words_tagged.split()
 
-            aspect_tags = []
-            pol_tags = []
-            text = []
+            text, aspect_tags, pol_tags = [], [], []
             is_in_aspect = False
             aspect_start_index = -1
 
             for i, w in enumerate(words_tagged):
+
                 word, tag = w.rsplit('=', 1)
+                text.append(word)
 
                 if tag != 'O' and tag != 'ASPECT0' and tag != '':
-                    aspect_tag, pol_tag = tag.split('-')
-                    if aspect_tag == 'T':
-                        if not is_in_aspect:
-                            is_in_aspect = True
-                            aspect_start_index = i
-                            aspect_tags.append('S')  # Inizio di un aspetto
-                        else:
-                            aspect_tags.append('S')  # Continuazione di un aspetto
+
+                    _, pol_tag = tag.split('-')
+                    if not is_in_aspect:
+                        is_in_aspect = True
+                        aspect_start_index = i
+                        aspect_tags.append('S')  # Inizio di un aspetto
                     else:
-                        if is_in_aspect:
-                            # Fine dell'aspetto corrente
-                            if aspect_start_index == i - 1:
-                                aspect_tags[i] = 'S'  # Singolo termine di aspetto
-                            else:
-                                aspect_tags[i] = 'S'  # Fine di un aspetto multi-token
-                            pol_tags.append((aspect_start_index, i-1, pol_tag))
-                            is_in_aspect = False
-                        aspect_tags.append('O')
+                        aspect_tags.append('S')  # Continuazione di un aspetto
+
                 else:
+
                     if is_in_aspect:
                         # Fine dell'aspetto corrente
-                        if aspect_start_index == i - 1:
-                            aspect_tags[-1] = 'S'
-                        else:
-                            aspect_tags[-1] = 'S'
+                        aspect_tags[-1] = 'S'
                         pol_tags.append((aspect_start_index, i-1, pol_tag))  # Presumiamo NEU se non specificato
                         is_in_aspect = False
                     aspect_tags.append('O')
 
-                text.append(word)
-
             # Controlla se il sample finisce con un aspetto
             if is_in_aspect:
-                if aspect_start_index == len(words_tagged) - 1:
-                    aspect_tags[-1] = 'S'
-                else:
-                    aspect_tags[-1] = 'E'
+                aspect_tags[-1] = 'S'
                 pol_tags.append((aspect_start_index, len(words_tagged) - 1, pol_tag))  # Presumiamo NEU se non specificato
 
-            text = ' '.join(text)
-            new_dataset.append((text, aspect_tags, pol_tags))
+            new_dataset.append((' '.join(text), aspect_tags, pol_tags))
+
             if INFO_ENABLED:
                 print('- Raw       :', words_tagged)
                 print('- Text      :', text)
                 print('- Aspects   :', aspect_tags)
                 print('- Polarities:', pol_tags, '\n')    
+
     return new_dataset
 
 
@@ -119,15 +106,15 @@ def load_dataset():
     test_set = process_raw_data(test_raw)
 
     lang = Lang()
-
     skf = KFold(n_splits=10, random_state=42, shuffle = True)
-
     fold_datasets = []  # This will store the dataset splits
-    pbar = tqdm(enumerate(skf.split(train_set)))
-    for k, (train_indices, val_indices) in pbar:
+
+    for k, (train_indices, val_indices) in enumerate(skf.split(train_set)):
+
         train_samples = [train_set[idx] for idx in train_indices]
         val_samples = [train_set[idx] for idx in val_indices]
-        pbar.set_description(f' - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
+
+        print(f' - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
 
         train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
@@ -136,7 +123,6 @@ def load_dataset():
         val_loader = DataLoader(val_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
         
         fold_datasets.append((train_loader, val_loader))
-        pbar.update(1)
 
     test_dataset = Dataset(test_set, lang)
     test_loader = DataLoader(test_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
@@ -165,13 +151,15 @@ class Lang:
         self.cls_token_id = self.tokenizer.cls_token_id
         self.sep_token_id = self.tokenizer.sep_token_id
 
-        self.aspect2id = {'O':1, 'B':2, 'I':3, 'E':4, 'S':5, '[PAD]':PAD_TOKEN}
+        self.aspect2id = {'[PAD]':PAD_TOKEN, 'O':1, 'B':2, 'I':3, 'E':4, 'S':5}
         self.id2aspect = {id: label for label, id in self.aspect2id.items()}
+        self.aspect_labels = len(self.aspect2id)
 
-        self.pol2id = {'O':1, 'NEG':2, 'POS':3, 'NEU':4, '[PAD]':PAD_TOKEN}
+        self.pol2id = {'[PAD]':PAD_TOKEN, 'O':1, 'NEG':2, 'POS':3, 'NEU':4}
         self.id2pol = {id: label for label, id in self.pol2id.items()}
+        self.polarity_labels = len(self.pol2id)
+
         self.vocab_size = len(self.tokenizer.vocab)
-        self.aspects = len(self.aspect2id)
         
     def decode_aspects(self, aspects):
         decoded_asp = []
@@ -207,19 +195,16 @@ class Dataset(data.Dataset):
             input_ids = tokenized_entry['input_ids']
         
             # Tokenization
-            if not INFO_ENABLED:
+            if INFO_ENABLED:
                 print('----------------------------- Sample ', i, '-----------------------------')
                 print('- Sent          :', entry[0].split())
                 print('- Aspects       :', entry[1])
                 print('- Polarities    :', entry[2])
                 print('- Encoded sentencence     :', input_ids)
 
-
-
-
             aligned_aspect, aligned_polarity, aligned_asp_pol, asp_pol_index = self.align_tags(entry[1], entry[2], entry[0].split(), input_ids)
 
-            if not INFO_ENABLED:
+            if INFO_ENABLED:
                 print('- Aligned encoded aspects :', aligned_aspect)
                 print('- Aligned encoded Polarity:', aligned_polarity)
                 print('- Aligned encoded Asp/Pol :', aligned_asp_pol)
@@ -236,7 +221,7 @@ class Dataset(data.Dataset):
             attention_masks.append(tokenized_entry['attention_mask'])
             token_types.append(tokenized_entry['token_type_ids'])
 
-            # Verify dimensionality
+            # Verify sample
             assert len(input_ids) == len(aligned_aspect) == len(tokenized_entry['attention_mask']) == len(tokenized_entry['token_type_ids']) == len(aligned_polarity)
             assert input_ids[0] == self.lang.cls_token_id and input_ids[-1] == self.lang.sep_token_id
             for pol in asp_pol_index:
@@ -254,8 +239,6 @@ class Dataset(data.Dataset):
     def align_tags(self, aspect_tags, pol_tags, words, input_ids):
         
         aligned_aspect = ['O'] * len(input_ids)  # Default 'O' for all tokens
-        aligned_polarity = [0] * len(input_ids)
-        aligned_asp_pol = ['O'] * len(input_ids)
         asp_pol_indexes = []
 
         current_aspect = 'O'
@@ -265,7 +248,7 @@ class Dataset(data.Dataset):
 
         for word, aspect in zip(words, aspect_tags):
             sub_tokens = self.lang.tokenizer.tokenize(word)
-            for sub_token in sub_tokens:
+            for _ in sub_tokens:
                 
                 if token_idx < len(input_ids) - 1:  # Skip [SEP] token
                     aligned_aspect[token_idx] = aspect
@@ -297,21 +280,34 @@ class Dataset(data.Dataset):
                 else:
                     aligned_aspect[idx] = self.lang.aspect2id[asp]
                     
-        if not INFO_ENABLED:
+        if INFO_ENABLED:
             print('- Aligned aspecs          :', aligned_aspect)
             print('- Decoded al. en. Aspects :', self.lang.decode_aspects(aligned_aspect))
 
+        aligned_asp_pol = self.lang.decode_aspects(aligned_aspect)
+        aligned_polarity = [self.lang.pol2id['O']] * len(input_ids)
 
         for pol in asp_pol_indexes:
             for i in range(pol[0], pol[1] + 1):
                 aligned_polarity[i] = self.lang.pol2id[pol[2]]
                 aligned_asp_pol[i] = aligned_asp_pol[i] + f'-{pol[2]}'
+
         return aligned_aspect, aligned_polarity, aligned_asp_pol, asp_pol_indexes
     
     def __len__(self):
         return len(self.utt_ids)
 
     def __getitem__(self, idx):
+        if INFO_ENABLED:
+            print('----------------------------- Sample ', idx, '-----------------------------')
+            print('- Sent Ids         :', self.utt_ids[idx])
+            print('- Aspects ids      :', self.asp_ids[idx])
+            print('- Polarities       :', self.pol_ids[idx])
+            print('- asp_pol_ids      :', self.asp_pol_ids[idx])
+            print('- Asp. Pol. Indexes:', self.asp_pol_indexes[idx])
+            print('- Attention mask   :', self.attention_masks[idx])
+            print('- Token type ids   :', self.token_types[idx])
+
         sample =  {
             'text': torch.tensor(self.utt_ids[idx]),
             'aspects': torch.tensor(self.asp_ids[idx]),
@@ -321,8 +317,9 @@ class Dataset(data.Dataset):
             'attention_mask': torch.tensor(self.attention_masks[idx]),
             'token_type_ids': torch.tensor(self.token_types[idx])
         }
+
         return sample
-    
+
 def collate_fn(data):
     def merge(sequences):
         '''
