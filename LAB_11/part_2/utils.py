@@ -28,7 +28,7 @@ sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
-DEVICE = 'cpu'
+DEVICE = 'cuda:0'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
 INFO_ENABLED = False
@@ -173,6 +173,32 @@ class Lang:
             decoded_pol.append(self.id2pol[pol])
         return decoded_pol
     
+    def encode_asppol(self, data):
+        encoded_seq = []
+        for tok in data:
+            sp_tok = tok.split('-')
+            if len(sp_tok) == 2:
+                asp, pol = sp_tok
+                id = int(str(self.aspect2id[asp]) + str(self.pol2id[pol]))
+                encoded_seq.append(id)
+            else:
+                asp, pol = 'O', 'O'
+                encoded_seq.append(self.aspect2id[asp])
+        return encoded_seq
+    
+    def decode_asppol(self, data):
+        decoded_seq = []
+        for tok in data:
+            tok = str(tok)
+            if len(tok) == 2:
+                asp = self.id2aspect[int(tok[0])]
+                pol = self.id2pol[int(tok[1])]
+                decoded_seq.append(f'{asp}-{pol}')
+            else:
+                decoded_seq.append(self.id2aspect[1])
+
+        return decoded_seq
+    
 class Dataset(data.Dataset):
     def __init__(self, dataset, lang):
         self.lang = lang
@@ -195,7 +221,7 @@ class Dataset(data.Dataset):
             input_ids = tokenized_entry['input_ids']
         
             # Tokenization
-            if INFO_ENABLED:
+            if not INFO_ENABLED:
                 print('----------------------------- Sample ', i, '-----------------------------')
                 print('- Sent          :', entry[0].split())
                 print('- Aspects       :', entry[1])
@@ -204,10 +230,12 @@ class Dataset(data.Dataset):
 
             aligned_aspect, aligned_polarity, aligned_asp_pol, asp_pol_index = self.align_tags(entry[1], entry[2], entry[0].split(), input_ids)
 
-            if INFO_ENABLED:
+            if not INFO_ENABLED:
                 print('- Aligned encoded aspects :', aligned_aspect)
                 print('- Aligned encoded Polarity:', aligned_polarity)
                 print('- Aligned encoded Asp/Pol :', aligned_asp_pol)
+                print('- Encoded Asp/Pol         :', self.lang.encode_asppol(aligned_asp_pol))
+                print('- Decoded Asp/Pol         :', self.lang.decode_asppol(self.lang.encode_asppol(aligned_asp_pol)))
                 print('- Asp/Pol indexes         :', asp_pol_index)
                 print('- Token type ids          :', tokenized_entry['token_type_ids'])
                 print('- Attention mask          :', tokenized_entry['attention_mask'])
@@ -280,7 +308,7 @@ class Dataset(data.Dataset):
                 else:
                     aligned_aspect[idx] = self.lang.aspect2id[asp]
                     
-        if INFO_ENABLED:
+        if not INFO_ENABLED:
             print('- Aligned aspecs          :', aligned_aspect)
             print('- Decoded al. en. Aspects :', self.lang.decode_aspects(aligned_aspect))
 
@@ -292,7 +320,7 @@ class Dataset(data.Dataset):
                 aligned_polarity[i] = self.lang.pol2id[pol[2]]
                 aligned_asp_pol[i] = aligned_asp_pol[i] + f'-{pol[2]}'
 
-        return aligned_aspect, aligned_polarity, aligned_asp_pol, asp_pol_indexes
+        return aligned_aspect, aligned_polarity, self.lang.encode_asppol(aligned_asp_pol), asp_pol_indexes
     
     def __len__(self):
         return len(self.utt_ids)
@@ -313,7 +341,7 @@ class Dataset(data.Dataset):
             'aspects': torch.tensor(self.asp_ids[idx]),
             'polarities': torch.tensor(self.pol_ids[idx]),
             'asp_pol_indexes': self.asp_pol_indexes[idx],
-            'asp_pol_ids': self.asp_pol_ids[idx],
+            'asp_pol_ids': torch.tensor(self.asp_pol_ids[idx]),
             'attention_mask': torch.tensor(self.attention_masks[idx]),
             'token_type_ids': torch.tensor(self.token_types[idx])
         }
@@ -344,6 +372,7 @@ def collate_fn(data):
     text, y_lengths = merge(new_item['text'])
     y_aspects, _ = merge(new_item["aspects"]) 
     y_polarities, _ = merge(new_item["polarities"]) 
+    y_asp_pol = merge(new_item['asp_pol_ids'])
 
     attention_mask, _ = merge(new_item['attention_mask'])
     token_type_ids, _ = merge(new_item['token_type_ids'])
@@ -351,6 +380,7 @@ def collate_fn(data):
     text = text.to(DEVICE)
     y_aspects = y_aspects.to(DEVICE)
     y_polarities = y_polarities.to(DEVICE)
+    y_asp_pol = y_asp_pol.to(DEVICE)
     y_lengths = torch.LongTensor(y_lengths).to(DEVICE)
     attention_mask = attention_mask.to(DEVICE)
     token_type_ids = token_type_ids.to(DEVICE)
@@ -358,9 +388,10 @@ def collate_fn(data):
     new_item["texts"] = text
     new_item["y_aspects"] = y_aspects
     new_item['y_polarities'] = y_polarities
+    new_item['y_asppol'] = y_asp_pol
     new_item["attention_mask"] = attention_mask
     new_item['token_type_ids'] = token_type_ids
 
-    sample = {'utterances': text.shape, 'yaspects':y_aspects.shape, 'ypolarities':y_aspects.shape,'attention_mask':attention_mask.shape}
+    sample = {'utterances': text.shape, 'yaspects':y_aspects.shape, 'ypolarities':y_aspects.shape,'attention_mask':attention_mask.shape, 'y_asppol':y_asp_pol.shape}
     print('-   Collate_fn :', sample)
     return new_item

@@ -159,20 +159,26 @@ def eval_loop(data_loader, model, parameters):
             print('- Active aspect logits:', active_aspect_logits)
             print('- Active polarity logi:', active_polarity_logits)
 
-            active_aspect_labels = sample['y_aspects'].view(-1)[active_mask]
-            active_polarity_labels = sample['asp_pol_ids'][1:-1]
 
             # Ora calcola le probabilità e le predizioni solo per i token attivi
             aspect_probs = torch.softmax(active_aspect_logits, dim=1)
             aspect_preds_batch = torch.argmax(aspect_probs, dim=1)
             aspect_preds.extend(parameters['lang'].decode_aspects(aspect_preds_batch.cpu().numpy()))
+
+            active_aspect_labels = sample['y_aspects'].view(-1)[active_mask]
             aspect_labels.extend(parameters['lang'].decode_aspects(active_aspect_labels.cpu().numpy()))
 
             polarity_probs = torch.softmax(active_polarity_logits, dim=1)
             polarity_preds_batch = torch.argmax(polarity_probs, dim=1)
             polarity_preds.extend(polarity_preds_batch)
+
+            active_polarity_labels = sample['y_asppol'].view(-1)[active_mask]
             polarity_labels.extend(active_polarity_labels)
 
+            print('- aspect_preds', parameters['lang'].decode_aspects(aspect_preds_batch.cpu().numpy()))
+            print('- aspect_labels', parameters['lang'].decode_aspects(active_aspect_labels.cpu().numpy()))
+            print('- polarity_preds', parameters['lang'].decode_aspects(active_aspect_labels.cpu().numpy()))
+            print('- ')
     print('- aspect_labels', aspect_labels[0])
     print('- polarity_labels', polarity_labels[0])
     print('- aspect_preds', aspect_preds[0])
