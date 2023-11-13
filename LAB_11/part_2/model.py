@@ -2,13 +2,11 @@ from transformers import BertTokenizer, BertModel
 import torch.nn as nn
 import torch
 
-
 class jointBERT(nn.Module):
     def __init__(self, output_aspects, output_polarities, dropout_rate=0.1):
         super(jointBERT, self).__init__()
         self.bert = BertModel.from_pretrained("bert-base-uncased")
         self.dropout = nn.Dropout(dropout_rate)
-        # Aggiungi un altro layer per la classificazione della polarità
         self.aspect_linear = nn.Linear(self.bert.config.hidden_size, output_aspects)
         self.polarity_linear = nn.Linear(self.bert.config.hidden_size, output_polarities)
 

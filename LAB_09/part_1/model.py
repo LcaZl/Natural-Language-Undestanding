@@ -17,7 +17,6 @@ class LM_(nn.Module):
 
         self.embedding_dropout = nn.Dropout(emb_dp_prob)
 
-        
         # Save padding token index
         self.pad_token = pad_index
         

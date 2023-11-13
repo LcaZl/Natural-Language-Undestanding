@@ -118,6 +118,7 @@ def train_loop(data_loader, optimizer, model, parameters):
     losses = []
 
     for sample in data_loader:
+
         optimizer.zero_grad()
         aspect_logits, polarity_logits = model(sample['texts'], sample['attention_mask'], None)
         aspect_loss = parameters['criterion'](aspect_logits.view(-1, aspect_logits.shape[-1]), sample['y_aspects'].view(-1))
