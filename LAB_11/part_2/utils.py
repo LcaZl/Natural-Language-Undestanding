@@ -31,7 +31,7 @@ UNK_TOKEN = 1
 DEVICE = 'cuda:0'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
-INFO_ENABLED = True
+INFO_ENABLED = False
 BERT_MAX_LEN = 512
 
 def read_file(file_path):
@@ -188,7 +188,7 @@ class Lang:
 class Dataset(data.Dataset):
     def __init__(self, dataset, lang):
         self.lang = lang
-        self.utt_ids, self.asp_ids, self.pol_ids, self.attention_masks, self.token_types, self.asp_polarities, self.pol_4_eval = self.prepare_data(dataset)
+        self.utt_ids, self.asp_ids, self.pol_ids, self.asp_pol_ids, self.asp_pol_indexes, self.attention_masks, self.token_types = self.prepare_data(dataset)
         self.first = True
 
     def prepare_data(self, dataset):
@@ -196,61 +196,68 @@ class Dataset(data.Dataset):
         utt_ids = []
         asp_ids = []
         pol_ids = []
-        aspects_polarity = []
+        asp_pol_ids = []
+        asp_pol_indexes = []
         attention_masks = []
         token_types = []
-        pol_4_eval = []
 
         for i, entry in enumerate(dataset):
+
+            tokenized_entry = self.lang.tokenizer(entry[0])
+            input_ids = tokenized_entry['input_ids']
+        
             # Tokenization
-            if INFO_ENABLED:
+            if not INFO_ENABLED:
                 print('----------------------------- Sample ', i, '-----------------------------')
                 print('- Sent          :', entry[0].split())
                 print('- Aspects       :', entry[1])
                 print('- Polarities    :', entry[2])
+                print('- Encoded sentencence     :', input_ids)
 
-            tokenized_entry = self.lang.tokenizer(entry[0])
-            input_ids = tokenized_entry['input_ids']
-            aligned_asp_ids, aligned_pol_ids, asp_pol, pol_eval  = self.align_tags(entry[1], entry[2], entry[0].split(), input_ids)
 
-            if INFO_ENABLED:
-                print('- Asp. encoded  :', aligned_asp_ids)
-                print('- Sent encoded  :', input_ids)
-                print('- Pol. encoded  :', aligned_pol_ids)
-                print('- Polarities al.:', asp_pol)
-                print('- Pol. 4 eval   :', pol_eval)
-                print('- Token type ids:', tokenized_entry['token_type_ids'])
-                print('- Attention mask:', tokenized_entry['attention_mask'])
+
+
+            aligned_aspect, aligned_polarity, aligned_asp_pol, asp_pol_index = self.align_tags(entry[1], entry[2], entry[0].split(), input_ids)
+
+            if not INFO_ENABLED:
+                print('- Aligned encoded aspects :', aligned_aspect)
+                print('- Aligned encoded Polarity:', aligned_polarity)
+                print('- Aligned encoded Asp/Pol :', aligned_asp_pol)
+                print('- Asp/Pol indexes         :', asp_pol_index)
+                print('- Token type ids          :', tokenized_entry['token_type_ids'])
+                print('- Attention mask          :', tokenized_entry['attention_mask'])
 
 
             utt_ids.append(input_ids)
-            asp_ids.append(aligned_asp_ids)
-            pol_ids.append(aligned_pol_ids)
-            aspects_polarity.append(asp_pol)
-            pol_4_eval.append(pol_eval)
-
+            asp_ids.append(aligned_aspect)
+            pol_ids.append(aligned_polarity)
+            asp_pol_ids.append(aligned_asp_pol)
+            asp_pol_indexes.append(asp_pol_index)
             attention_masks.append(tokenized_entry['attention_mask'])
             token_types.append(tokenized_entry['token_type_ids'])
 
             # Verify dimensionality
-            assert len(input_ids) == len(aligned_asp_ids) == len(tokenized_entry['attention_mask']) == len(tokenized_entry['token_type_ids']) == len(aligned_pol_ids)
+            assert len(input_ids) == len(aligned_aspect) == len(tokenized_entry['attention_mask']) == len(tokenized_entry['token_type_ids']) == len(aligned_polarity)
             assert input_ids[0] == self.lang.cls_token_id and input_ids[-1] == self.lang.sep_token_id
-            for pol in asp_pol:
+            for pol in asp_pol_index:
                 if pol[0] == pol[1]:
-                    assert aligned_asp_ids[pol[0]] == self.lang.aspect2id['S'] and aligned_asp_ids[pol[1]] == self.lang.aspect2id['S']
+                    assert aligned_aspect[pol[0]] == self.lang.aspect2id['S'] and aligned_aspect[pol[1]] == self.lang.aspect2id['S']
                 else:
                     assert pol[0] < pol[1]
-                    assert aligned_asp_ids[pol[0]] == self.lang.aspect2id['B'] and aligned_asp_ids[pol[1]] == self.lang.aspect2id['E']
+                    assert aligned_aspect[pol[0]] == self.lang.aspect2id['B'] and aligned_aspect[pol[1]] == self.lang.aspect2id['E']
                     if pol[1] - pol[0] >> 1:
-                        for asp_id in aligned_asp_ids[pol[0] + 1: pol[1] - 1]:
+                        for asp_id in aligned_aspect[pol[0] + 1: pol[1] - 1]:
                             assert asp_id == self.lang.aspect2id['I']
 
-        return utt_ids, asp_ids, pol_ids, attention_masks, token_types, aspects_polarity, pol_4_eval
+        return utt_ids, asp_ids, pol_ids, asp_pol_ids, asp_pol_indexes, attention_masks, token_types
     
     def align_tags(self, aspect_tags, pol_tags, words, input_ids):
         
-        aligned_aspects = ['O'] * len(input_ids)  # Default 'O' for all tokens
-        asp_polarities = []
+        aligned_aspect = ['O'] * len(input_ids)  # Default 'O' for all tokens
+        aligned_polarity = [0] * len(input_ids)
+        aligned_asp_pol = ['O'] * len(input_ids)
+        asp_pol_indexes = []
+
         current_aspect = 'O'
         aspect_start = None
         token_idx = 1  # Start from 1 to skip [CLS] token
@@ -261,7 +268,7 @@ class Dataset(data.Dataset):
             for sub_token in sub_tokens:
                 
                 if token_idx < len(input_ids) - 1:  # Skip [SEP] token
-                    aligned_aspects[token_idx] = aspect
+                    aligned_aspect[token_idx] = aspect
                     if aspect != 'O':
                         if current_aspect == 'O':  # Start of a new aspect
                             aspect_start = token_idx
@@ -270,37 +277,36 @@ class Dataset(data.Dataset):
                         current_aspect = aspect
                     elif current_aspect != 'O':  # End of the current aspect
                         end_idx = token_idx - 1 if aspect_start != token_idx - 1 else aspect_start
-                        asp_polarities.append((aspect_start, end_idx, aspect_sent))
+                        asp_pol_indexes.append((aspect_start, end_idx, aspect_sent))
                         current_aspect = 'O'
                     token_idx += 1
 
         in_aspect = False
-        for idx, asp in enumerate(aligned_aspects):
+        for idx, asp in enumerate(aligned_aspect):
                 if asp == 'S':
-                    if not in_aspect and aligned_aspects[idx + 1] == 'S': 
+                    if not in_aspect and aligned_aspect[idx + 1] == 'S': 
                         in_aspect = True
-                        aligned_aspects[idx] = self.lang.aspect2id['B']
-                    elif in_aspect and aligned_aspects[idx + 1] == 'S':
-                        aligned_aspects[idx] = self.lang.aspect2id['I']
-                    elif in_aspect and not aligned_aspects[idx + 1] == 'S':
-                        aligned_aspects[idx] = self.lang.aspect2id['E']
+                        aligned_aspect[idx] = self.lang.aspect2id['B']
+                    elif in_aspect and aligned_aspect[idx + 1] == 'S':
+                        aligned_aspect[idx] = self.lang.aspect2id['I']
+                    elif in_aspect and not aligned_aspect[idx + 1] == 'S':
+                        aligned_aspect[idx] = self.lang.aspect2id['E']
                         in_aspect = False
                     else:
-                        aligned_aspects[idx] = self.lang.aspect2id[asp]
+                        aligned_aspect[idx] = self.lang.aspect2id[asp]
                 else:
-                    aligned_aspects[idx] = self.lang.aspect2id[asp]
+                    aligned_aspect[idx] = self.lang.aspect2id[asp]
                     
-        if INFO_ENABLED:
-            print('- Asp before enc:', aligned_aspects)
-            print('- Asp decoded   :', self.lang.decode_aspects(aligned_aspects))
+        if not INFO_ENABLED:
+            print('- Aligned aspecs          :', aligned_aspect)
+            print('- Decoded al. en. Aspects :', self.lang.decode_aspects(aligned_aspect))
 
-        aligned_polarities = [0] * len(input_ids)
-        polarities_eval = self.lang.decode_aspects(aligned_aspects)
-        for pol in asp_polarities:
+
+        for pol in asp_pol_indexes:
             for i in range(pol[0], pol[1] + 1):
-                aligned_polarities[i] = self.lang.pol2id[pol[2]]
-                polarities_eval[i] = polarities_eval[i] + f'-{pol[2]}'
-        return aligned_aspects, aligned_polarities, asp_polarities, polarities_eval
+                aligned_polarity[i] = self.lang.pol2id[pol[2]]
+                aligned_asp_pol[i] = aligned_asp_pol[i] + f'-{pol[2]}'
+        return aligned_aspect, aligned_polarity, aligned_asp_pol, asp_pol_indexes
     
     def __len__(self):
         return len(self.utt_ids)
@@ -310,8 +316,8 @@ class Dataset(data.Dataset):
             'text': torch.tensor(self.utt_ids[idx]),
             'aspects': torch.tensor(self.asp_ids[idx]),
             'polarities': torch.tensor(self.pol_ids[idx]),
-            'asp_polarities': self.asp_polarities,
-            'pol_4_eval': self.pol_4_eval,
+            'asp_pol_indexes': self.asp_pol_indexes[idx],
+            'asp_pol_ids': self.asp_pol_ids[idx],
             'attention_mask': torch.tensor(self.attention_masks[idx]),
             'token_type_ids': torch.tensor(self.token_types[idx])
         }

@@ -154,7 +154,7 @@ def eval_loop(data_loader, model, parameters):
             active_polarity_logits = polarity_logits.view(-1, polarity_logits.shape[-1])[active_mask]
 
             active_aspect_labels = sample['y_aspects'].view(-1)[active_mask]
-            active_polarity_labels = sample['pol_4_eval'].view(-1)[active_mask]
+            active_polarity_labels = sample['asp_pol_ids'][1:-1]
 
             # Ora calcola le probabilità e le predizioni solo per i token attivi
             aspect_probs = torch.softmax(active_aspect_logits, dim=1)
@@ -164,8 +164,8 @@ def eval_loop(data_loader, model, parameters):
 
             polarity_probs = torch.softmax(active_polarity_logits, dim=1)
             polarity_preds_batch = torch.argmax(polarity_probs, dim=1)
-            polarity_preds.extend(polarity_preds_batch.cpu().numpy())
-            polarity_labels.extend(active_polarity_labels.cpu().numpy())
+            polarity_preds.extend(polarity_preds_batch)
+            polarity_labels.extend(active_polarity_labels)
 
     report = evaluate(aspect_labels, polarity_labels, aspect_preds, polarity_preds) # (PRECISION, RECALL, F1)
     print('evaluate report:', report)
