@@ -94,23 +94,24 @@ def train_lm(parameters):
 
         loss, report = eval_loop(dev_loader, model, parameters)
         losses[loss_idx].append(loss)
+        ote_score, ts_score = report
 
-        f = round(report[2], 3)
-        recall = round(report[1], 3)
-        prec = round(report[0], 3)
+        f = round(ts_score[0], 3)
+        recall = round(ts_score[2], 3)
+        prec = round(ts_score[1], 3)
+        fm = round(ts_score[3], 3)
 
         if f > best_score:
             best_score = f
             best_model = model
         
-        pbar.set_description(f'FOLD {i+1} - F1:{f} - P:{prec} - R:{recall}')
+        pbar.set_description(f'FOLD {i+1} - F1:{f} - P:{prec} - R:{recall} - F1M:{fm}')
 
     loss, report = eval_loop(parameters['test_loader'], best_model, parameters)
     losses[loss_idx].append(loss)
-    f = round(report[2], 3)
-    recall = round(report[1], 3)
-    prec = round(report[0], 3)
-    report = (model, [i, f, prec, recall])
+    ote_score, ts_score = report
+
+    report = (model, [i, ote_score, ts_score])
     return best_model, report, losses
 
 def train_loop(data_loader, optimizer, model, parameters):
@@ -125,7 +126,6 @@ def train_loop(data_loader, optimizer, model, parameters):
         aspect_loss = parameters['criterion'](aspect_logits.view(-1, aspect_logits.shape[-1]), sample['y_aspects'].view(-1))
         polarity_loss = parameters['criterion'](polarity_logits.view(-1, polarity_logits.shape[-1]), sample['y_polarities'].view(-1))
         loss = aspect_loss + polarity_loss  # Considera di pesare diversamente le due loss se necessario
-        print('Aspect - Polarity - Total Loss:', aspect_loss, polarity_loss, loss)
 
         losses.append(loss.item())
         loss.backward()
@@ -156,35 +156,51 @@ def eval_loop(data_loader, model, parameters):
             active_aspect_logits = aspect_logits.view(-1, aspect_logits.shape[-1])[active_mask]
             active_polarity_logits = polarity_logits.view(-1, polarity_logits.shape[-1])[active_mask]
 
-            print('- Active aspect logits:', active_aspect_logits)
-            print('- Active polarity logi:', active_polarity_logits)
-
-
             # Ora calcola le probabilità e le predizioni solo per i token attivi
             aspect_probs = torch.softmax(active_aspect_logits, dim=1)
             aspect_preds_batch = torch.argmax(aspect_probs, dim=1)
-            aspect_preds.extend(parameters['lang'].decode_aspects(aspect_preds_batch.cpu().numpy()))
-
-            active_aspect_labels = sample['y_aspects'].view(-1)[active_mask]
-            aspect_labels.extend(parameters['lang'].decode_aspects(active_aspect_labels.cpu().numpy()))
+            aspect_preds.extend(aspect_preds_batch.cpu().numpy())
 
             polarity_probs = torch.softmax(active_polarity_logits, dim=1)
             polarity_preds_batch = torch.argmax(polarity_probs, dim=1)
-            polarity_preds.extend(polarity_preds_batch)
+            polarity_preds.extend(polarity_preds_batch.cpu().numpy())
+
+            active_aspect_labels = sample['y_aspects'].view(-1)[active_mask]
+            aspect_labels.extend(active_aspect_labels.cpu().numpy())
 
             active_polarity_labels = sample['y_asppol'].view(-1)[active_mask]
             polarity_labels.extend(active_polarity_labels)
 
-            print('- aspect_preds', parameters['lang'].decode_aspects(aspect_preds_batch.cpu().numpy()))
-            print('- aspect_labels', parameters['lang'].decode_aspects(active_aspect_labels.cpu().numpy()))
-            print('- polarity_preds', parameters['lang'].decode_aspects(active_aspect_labels.cpu().numpy()))
-            print('- ')
-    print('- aspect_labels', aspect_labels[0])
-    print('- polarity_labels', polarity_labels[0])
-    print('- aspect_preds', aspect_preds[0])
-    print('- polarity_preds', polarity_preds[0])
+            if INFO_ENABLED:
+                print('- aspect_preds   :', parameters['lang'].decode_aspects(aspect_preds_batch.cpu().numpy()))
+                print('- aspect_labels  :', parameters['lang'].decode_aspects(active_aspect_labels.cpu().numpy()))
+                print('- polarity_predsW :', parameters['lang'].decode_polarities(polarity_preds_batch.cpu().numpy()))
+                print('- polarity_labels:', parameters['lang'].decode_asppol(active_polarity_labels.cpu().numpy()))
 
-    report = evaluate(aspect_labels, polarity_labels, aspect_preds, polarity_preds) # (PRECISION, RECALL, F1)
+    gold_ts = []
+
+    aspect_mask = [el != 0 for el in aspect_preds]
+    aspect_preds = parameters['lang'].decode_aspects(aspect_preds)
+    polarity_preds = parameters['lang'].decode_polarities(polarity_preds)
+    aspect_labels = parameters['lang'].decode_aspects(aspect_labels)
+    polarity_labels = parameters['lang'].decode_asppol(polarity_labels)
+
+    if (len(aspect_preds) == len(polarity_preds)):
+        for asp, pol, is_aspect in zip(aspect_preds, polarity_preds, aspect_mask):
+            if is_aspect:
+                label = f'{asp}-{pol}'
+                gold_ts.append(label)
+            else:
+                gold_ts.append('O')
+
+    if INFO_ENABLED:
+        print('- aspect_labels', aspect_labels[0])
+        print('- polarity_labels', polarity_labels[0])
+        print('- aspect_preds', aspect_preds[0])
+        print('- Aspects mask:', aspect_mask)
+        print('- polarity_preds', gold_ts[0])
+
+    report = evaluate(aspect_labels, polarity_labels, aspect_preds, gold_ts) # (PRECISION, RECALL, F1)
     print('evaluate report:', report)
     return round(np.mean(losses), 3), report
 

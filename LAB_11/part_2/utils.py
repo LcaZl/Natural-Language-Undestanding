@@ -8,7 +8,7 @@ from nltk.sentiment.util import mark_negation
 from sklearn.model_selection import KFold
 from nltk.sentiment import SentimentIntensityAnalyzer
 import torch.utils.data as data
-
+import pandas as pd
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from nltk.sentiment.util import mark_negation
@@ -28,7 +28,7 @@ sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
-DEVICE = 'cuda:0'
+DEVICE = 'cpu'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
 INFO_ENABLED = False
@@ -151,11 +151,11 @@ class Lang:
         self.cls_token_id = self.tokenizer.cls_token_id
         self.sep_token_id = self.tokenizer.sep_token_id
 
-        self.aspect2id = {'[PAD]':PAD_TOKEN, 'O':1, 'B':2, 'I':3, 'E':4, 'S':5}
+        self.aspect2id = {'O':0, 'B':1, 'I':2, 'E':3, 'S':4}
         self.id2aspect = {id: label for label, id in self.aspect2id.items()}
         self.aspect_labels = len(self.aspect2id)
 
-        self.pol2id = {'[PAD]':PAD_TOKEN, 'O':1, 'NEG':2, 'POS':3, 'NEU':4}
+        self.pol2id = {'NEG':0, 'POS':1, 'NEU':2}
         self.id2pol = {id: label for label, id in self.pol2id.items()}
         self.polarity_labels = len(self.pol2id)
 
@@ -221,7 +221,7 @@ class Dataset(data.Dataset):
             input_ids = tokenized_entry['input_ids']
         
             # Tokenization
-            if not INFO_ENABLED:
+            if INFO_ENABLED:
                 print('----------------------------- Sample ', i, '-----------------------------')
                 print('- Sent          :', entry[0].split())
                 print('- Aspects       :', entry[1])
@@ -230,12 +230,11 @@ class Dataset(data.Dataset):
 
             aligned_aspect, aligned_polarity, aligned_asp_pol, asp_pol_index = self.align_tags(entry[1], entry[2], entry[0].split(), input_ids)
 
-            if not INFO_ENABLED:
+            if INFO_ENABLED:
                 print('- Aligned encoded aspects :', aligned_aspect)
                 print('- Aligned encoded Polarity:', aligned_polarity)
                 print('- Aligned encoded Asp/Pol :', aligned_asp_pol)
-                print('- Encoded Asp/Pol         :', self.lang.encode_asppol(aligned_asp_pol))
-                print('- Decoded Asp/Pol         :', self.lang.decode_asppol(self.lang.encode_asppol(aligned_asp_pol)))
+                print('- Decoded Asp/Pol         :', self.lang.decode_asppol(aligned_asp_pol))
                 print('- Asp/Pol indexes         :', asp_pol_index)
                 print('- Token type ids          :', tokenized_entry['token_type_ids'])
                 print('- Attention mask          :', tokenized_entry['attention_mask'])
@@ -308,12 +307,12 @@ class Dataset(data.Dataset):
                 else:
                     aligned_aspect[idx] = self.lang.aspect2id[asp]
                     
-        if not INFO_ENABLED:
+        if INFO_ENABLED:
             print('- Aligned aspecs          :', aligned_aspect)
             print('- Decoded al. en. Aspects :', self.lang.decode_aspects(aligned_aspect))
 
         aligned_asp_pol = self.lang.decode_aspects(aligned_aspect)
-        aligned_polarity = [self.lang.pol2id['O']] * len(input_ids)
+        aligned_polarity = [self.lang.pol2id['NEU']] * len(input_ids)
 
         for pol in asp_pol_indexes:
             for i in range(pol[0], pol[1] + 1):
@@ -327,6 +326,7 @@ class Dataset(data.Dataset):
 
     def __getitem__(self, idx):
         if INFO_ENABLED:
+            df = pd.DataFrame
             print('----------------------------- Sample ', idx, '-----------------------------')
             print('- Sent Ids         :', self.utt_ids[idx])
             print('- Aspects ids      :', self.asp_ids[idx])
@@ -372,7 +372,7 @@ def collate_fn(data):
     text, y_lengths = merge(new_item['text'])
     y_aspects, _ = merge(new_item["aspects"]) 
     y_polarities, _ = merge(new_item["polarities"]) 
-    y_asp_pol = merge(new_item['asp_pol_ids'])
+    y_asp_pol, _ = merge(new_item['asp_pol_ids'])
 
     attention_mask, _ = merge(new_item['attention_mask'])
     token_type_ids, _ = merge(new_item['token_type_ids'])
