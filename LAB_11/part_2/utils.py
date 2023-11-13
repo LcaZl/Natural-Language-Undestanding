@@ -31,7 +31,7 @@ UNK_TOKEN = 1
 DEVICE = 'cuda:0'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
-INFO_ENABLED = False
+INFO_ENABLED = True
 BERT_MAX_LEN = 512
 
 def read_file(file_path):
@@ -165,10 +165,10 @@ class Lang:
         self.cls_token_id = self.tokenizer.cls_token_id
         self.sep_token_id = self.tokenizer.sep_token_id
 
-        self.aspect2id = {'O':0, 'B':1, 'I':2, 'E':3, 'S':4, '[PAD]':PAD_TOKEN}
+        self.aspect2id = {'O':1, 'B':2, 'I':3, 'E':4, 'S':5, '[PAD]':PAD_TOKEN}
         self.id2aspect = {id: label for label, id in self.aspect2id.items()}
 
-        self.pol2id = {'O':0, 'NEG':1, 'POS':2, 'NEU':3, '[PAD]':PAD_TOKEN}
+        self.pol2id = {'O':1, 'NEG':2, 'POS':3, 'NEU':4, '[PAD]':PAD_TOKEN}
         self.id2pol = {id: label for label, id in self.pol2id.items()}
         self.vocab_size = len(self.tokenizer.vocab)
         self.aspects = len(self.aspect2id)
@@ -188,7 +188,7 @@ class Lang:
 class Dataset(data.Dataset):
     def __init__(self, dataset, lang):
         self.lang = lang
-        self.utt_ids, self.asp_ids, self.pol_ids, self.attention_masks, self.token_types, self.asp_polarities = self.prepare_data(dataset)
+        self.utt_ids, self.asp_ids, self.pol_ids, self.attention_masks, self.token_types, self.asp_polarities, self.pol_4_eval = self.prepare_data(dataset)
         self.first = True
 
     def prepare_data(self, dataset):
@@ -199,6 +199,7 @@ class Dataset(data.Dataset):
         aspects_polarity = []
         attention_masks = []
         token_types = []
+        pol_4_eval = []
 
         for i, entry in enumerate(dataset):
             # Tokenization
@@ -210,13 +211,14 @@ class Dataset(data.Dataset):
 
             tokenized_entry = self.lang.tokenizer(entry[0])
             input_ids = tokenized_entry['input_ids']
-            aligned_asp_ids, aligned_pol_ids, asp_pol  = self.align_tags(entry[1], entry[2], entry[0].split(), input_ids)
+            aligned_asp_ids, aligned_pol_ids, asp_pol, pol_eval  = self.align_tags(entry[1], entry[2], entry[0].split(), input_ids)
 
             if INFO_ENABLED:
                 print('- Asp. encoded  :', aligned_asp_ids)
                 print('- Sent encoded  :', input_ids)
                 print('- Pol. encoded  :', aligned_pol_ids)
                 print('- Polarities al.:', asp_pol)
+                print('- Pol. 4 eval   :', pol_eval)
                 print('- Token type ids:', tokenized_entry['token_type_ids'])
                 print('- Attention mask:', tokenized_entry['attention_mask'])
 
@@ -225,6 +227,7 @@ class Dataset(data.Dataset):
             asp_ids.append(aligned_asp_ids)
             pol_ids.append(aligned_pol_ids)
             aspects_polarity.append(asp_pol)
+            pol_4_eval.append(pol_eval)
 
             attention_masks.append(tokenized_entry['attention_mask'])
             token_types.append(tokenized_entry['token_type_ids'])
@@ -242,7 +245,7 @@ class Dataset(data.Dataset):
                         for asp_id in aligned_asp_ids[pol[0] + 1: pol[1] - 1]:
                             assert asp_id == self.lang.aspect2id['I']
 
-        return utt_ids, asp_ids, pol_ids, attention_masks, token_types, aspects_polarity
+        return utt_ids, asp_ids, pol_ids, attention_masks, token_types, aspects_polarity, pol_4_eval
     
     def align_tags(self, aspect_tags, pol_tags, words, input_ids):
         
@@ -271,9 +274,6 @@ class Dataset(data.Dataset):
                         current_aspect = 'O'
                     token_idx += 1
 
-        if INFO_ENABLED:
-            print('- Aspects before encode:', aligned_aspects)
-
         in_aspect = False
         for idx, asp in enumerate(aligned_aspects):
                 if asp == 'S':
@@ -290,12 +290,17 @@ class Dataset(data.Dataset):
                 else:
                     aligned_aspects[idx] = self.lang.aspect2id[asp]
                     
+        if INFO_ENABLED:
+            print('- Asp before enc:', aligned_aspects)
+            print('- Asp decoded   :', self.lang.decode_aspects(aligned_aspects))
+
         aligned_polarities = [0] * len(input_ids)
+        polarities_eval = self.lang.decode_aspects(aligned_aspects)
         for pol in asp_polarities:
             for i in range(pol[0], pol[1] + 1):
                 aligned_polarities[i] = self.lang.pol2id[pol[2]]
-
-        return aligned_aspects, aligned_polarities, asp_polarities 
+                polarities_eval[i] = polarities_eval[i] + f'-{pol[2]}'
+        return aligned_aspects, aligned_polarities, asp_polarities, polarities_eval
     
     def __len__(self):
         return len(self.utt_ids)
@@ -306,6 +311,7 @@ class Dataset(data.Dataset):
             'aspects': torch.tensor(self.asp_ids[idx]),
             'polarities': torch.tensor(self.pol_ids[idx]),
             'asp_polarities': self.asp_polarities,
+            'pol_4_eval': self.pol_4_eval,
             'attention_mask': torch.tensor(self.attention_masks[idx]),
             'token_type_ids': torch.tensor(self.token_types[idx])
         }
