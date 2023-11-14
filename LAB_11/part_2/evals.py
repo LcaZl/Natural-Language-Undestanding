@@ -146,10 +146,6 @@ def evaluate(gold_ot, gold_ts, pred_ot, pred_ts):
     :param pred_ts: predicted targeted sentiment tags
     :return: metric scores of ner and sa
     """
-    print('-GOLD OT:', len(gold_ot))
-    print('-PRED OT:', len(pred_ot))
-    print('-GOLD TS:', len(gold_ts))
-    print('-PRED TS:', len(pred_ts))
 
     assert len(gold_ot) == len(gold_ts) == len(pred_ot) == len(pred_ts)
     ote_scores = evaluate_ote(gold_ot=gold_ot, pred_ot=pred_ot)
