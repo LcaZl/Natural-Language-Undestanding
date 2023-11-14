@@ -27,8 +27,8 @@ nlp = spacy.load("en_core_web_sm")
 sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
-UNK_TOKEN = 1
-DEVICE = 'cpu'
+
+DEVICE = 'cuda:0'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
 INFO_ENABLED = False
@@ -156,7 +156,7 @@ class Lang:
         self.id2aspect = {id: label for label, id in self.aspect2id.items()}
         self.aspect_labels = len(self.aspect2id)
 
-        self.pol2id = {'NEG':0, 'POS':1, 'NEU':2}
+        self.pol2id = {'POS': 0, 'NEG': 1, 'NEU': 2}
         self.id2pol = {id: label for label, id in self.pol2id.items()}
         self.polarity_labels = len(self.pol2id)
 
@@ -189,6 +189,7 @@ class Lang:
     
     def decode_asppol(self, data):
         decoded_seq = []
+
         
         for tok in data:
             tok = str(tok)
@@ -197,7 +198,7 @@ class Lang:
                 pol = self.id2pol[int(tok[1])]
                 decoded_seq.append(f'{asp}-{pol}')
             else:
-                assert int(tok) == 0
+                
                 decoded_seq.append('O')
 
         return decoded_seq
@@ -334,6 +335,7 @@ class Dataset(data.Dataset):
             print('- Aspects ids      :', self.asp_ids[idx])
             print('- Polarities       :', self.pol_ids[idx])
             print('- asp_pol_ids      :', self.asp_pol_ids[idx])
+            print('- asp_pol_ids_dec  :', self.lang.decode_asppol(self.asp_pol_ids[idx]))
             print('- Asp. Pol. Indexes:', self.asp_pol_indexes[idx])
             print('- Attention mask   :', self.attention_masks[idx])
             print('- Token type ids   :', self.token_types[idx])

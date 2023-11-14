@@ -114,22 +114,24 @@ def train_lm(parameters):
 
 
 def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
+    attention_mask = sample['attention_mask'][:, 1:-1]
+    aspect_logits = aspect_logits[:, 1:-1, :]
+    polarity_logits = polarity_logits[:, 1:-1, :]
 
     aspect_preds = torch.argmax(aspect_logits, dim=-1)
-    aspect_mask = aspect_preds != parameters['lang'].aspect2id['O']
-    #print('- aspect_preds      :', aspect_preds.shape, '\n', aspect_preds)
-    #print('- polarity_logits    :', polarity_logits.shape, '\n', polarity_logits)
-    #print('- aspect_mask       :', aspect_mask.shape, '\n', aspect_mask)
+    aspect_mask = aspect_preds != parameters['lang'].aspect2id['O'] & attention_mask.cpu().numpy()
+    print('- aspect_preds      :', aspect_preds.shape, '\n', aspect_preds)
+    print('- polarity_logits    :', polarity_logits.shape, '\n', polarity_logits)
+    print('- aspect_mask       :', aspect_mask.shape, '\n', aspect_mask)
 
     # Flat aspect logits - Aspect loss
     flat_aspect_logits = aspect_logits.view(-1, aspect_logits.shape[-1])
     flat_aspect_labels = sample['y_aspects'].view(-1)
-    #print('- flat_aspect_logits:', len(flat_aspect_logits), '', flat_aspect_logits)
-    #print('- flat_aspect_labels:', len(flat_aspect_labels), '', flat_aspect_labels)
+    print('- flat_aspect_logits:', len(flat_aspect_logits), '', flat_aspect_logits)
+    print('- flat_aspect_labels:', len(flat_aspect_labels), '', flat_aspect_labels)
     aspect_loss = parameters['criterion'](flat_aspect_logits, flat_aspect_labels)
 
-
-    #print('- aspect_loss       :', aspect_loss.item())
+    print('- aspect_loss       :', aspect_loss.item())
 
     # Flat polarity - Polarity Loss
     flat_polarity_logits = polarity_logits.view(-1, polarity_logits.shape[-1])
@@ -138,11 +140,11 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     selected_polarity_labels = flat_polarity_labels[aspect_mask.view(-1)]
     polarity_loss = parameters['criterion'](selected_polarity_logits, selected_polarity_labels)
 
-    #print('-flat_polarity_logits:', len(flat_polarity_logits), '', flat_polarity_logits)
-    #print('-flat_polarity_labels:', len(flat_polarity_labels), '', flat_polarity_labels)
-    #print('-sele_polarity_logits:', len(selected_polarity_logits), '', selected_polarity_logits)
-    #print('-sele_polarity_labels:', len(selected_polarity_labels), '', selected_polarity_labels)
-    #print('- polarity_loss:', polarity_loss.item())
+    print('-flat_polarity_logits:', len(flat_polarity_logits), '', flat_polarity_logits)
+    print('-flat_polarity_labels:', len(flat_polarity_labels), '', flat_polarity_labels)
+    print('-sele_polarity_logits:', len(selected_polarity_logits), '', selected_polarity_logits)
+    print('-sele_polarity_labels:', len(selected_polarity_labels), '', selected_polarity_labels)
+    print('- polarity_loss:', polarity_loss.item())
 
     loss = aspect_loss + polarity_loss
     #print('- total_loss:', loss)
@@ -150,10 +152,13 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     return loss
 
 def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
+    attention_mask = sample['attention_mask'][:, 1:-1]
+    aspect_logits = aspect_logits[:, 1:-1, :]
+    polarity_logits = polarity_logits[:, 1:-1, :]
 
-    gold_ot = sample['y_aspects'].cpu().numpy()
+    gold_ot = sample['y_aspects'][:, 1:-1].cpu().numpy()
     pred_ot = torch.argmax(aspect_logits, dim=-1).cpu().numpy()
-    aspect_mask = pred_ot != parameters['lang'].aspect2id['O']
+    aspect_mask = pred_ot != parameters['lang'].aspect2id['O'] & attention_mask.cpu().numpy()
     #print('- gold_ot:', len(gold_ot), '', gold_ot)
     #print('- pred_ot:', len(pred_ot), '\n', pred_ot)
     #print('- aspect_mask:', len(aspect_mask), '\n', aspect_mask)
@@ -196,6 +201,7 @@ def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
     #print('gold_ts',len(gold_ts),'',gold_ts)
     #print('pred_ts',len(pred_ts),'',pred_ts)
     #print(evaluate_ts(gold_ts, pred_ot))
+    print('-mask   :',aspect_mask[0])
     print('-gold_ot:',gold_ot[0])
     print('-pred_ot:',pred_ot[0])
     print('-gold_ts:',gold_ts[0])
