@@ -28,7 +28,7 @@ sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
 
-DEVICE = 'cpu'
+DEVICE = 'cuda:0'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
 INFO_ENABLED = False
@@ -151,12 +151,12 @@ class Lang:
 
         self.cls_token_id = self.tokenizer.cls_token_id
         self.sep_token_id = self.tokenizer.sep_token_id
+        self.aspol_pad_id = -1
 
-        self.aspect2id = {'O':0, 'B':1, 'I':2, 'E':3, 'S':4}
+        self.aspect2id = {'[PAD]':self.aspol_pad_id, 'O':0, 'B':1, 'I':2, 'E':3, 'S':4}
         self.id2aspect = {id: label for label, id in self.aspect2id.items()}
         self.aspect_labels = len(self.aspect2id)
-
-        self.pol2id = {'POS': 0, 'NEG': 1, 'NEU': 2}
+        self.pol2id = {'[PAD]':self.aspol_pad_id,'POS': 0, 'NEG': 1, 'NEU': 2}
         self.id2pol = {id: label for label, id in self.pol2id.items()}
         self.polarity_labels = len(self.pol2id)
 
@@ -353,13 +353,13 @@ class Dataset(data.Dataset):
         return sample
 
 def collate_fn(data):
-    def merge(sequences):
+    def merge(sequences, bert = False):
         '''
         merge from batch * sent_len to batch * max_len 
         '''
         lengths = [min(len(seq), BERT_MAX_LEN) for seq in sequences]  # Capture effective lengths but ensure they don't exceed 512
         max_len = 1 if max(lengths)==0 else max(lengths)
-        padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(PAD_TOKEN)
+        padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(PAD_TOKEN if bert else -1)
         
         for i, seq in enumerate(sequences):
             end = lengths[i]  # Use the effective length for padding
@@ -373,7 +373,7 @@ def collate_fn(data):
     for key in data[0].keys():
         new_item[key] = [d[key] for d in data]
 
-    text, y_lengths = merge(new_item['text'])
+    text, y_lengths = merge(new_item['text'], bert = True)
     y_aspects, _ = merge(new_item["aspects"]) 
     y_polarities, _ = merge(new_item["polarities"]) 
     y_asp_pol, _ = merge(new_item['asp_pol_ids'])

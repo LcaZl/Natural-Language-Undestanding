@@ -24,7 +24,7 @@ if __name__ == "__main__":
             'learning_rate': 5e-5,
             'grid_search':False,
             'grid_search_parameters': grid_search_parameters,
-            'criterion':nn.CrossEntropyLoss(),
+            'criterion':nn.CrossEntropyLoss(ignore_index = -1),
             'lang':lang,
             'output_aspects': lang.aspect_labels,
             'output_polarities':lang.polarity_labels,
