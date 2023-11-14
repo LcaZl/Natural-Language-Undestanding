@@ -3,7 +3,7 @@
 
 # Import everything from functions.py file
 from functions import *
-
+    
 if __name__ == "__main__":
     #Wrtite the code to load the datasets and to run your functions
     # Print the results
@@ -21,7 +21,7 @@ if __name__ == "__main__":
             'n_splits':10,
             'optimizer':'Adam',
             'dropout': 0.10,
-            'learning_rate': 0.001,
+            'learning_rate': 0.0001,
             'grid_search':False,
             'grid_search_parameters': grid_search_parameters,
             'criterion':nn.CrossEntropyLoss(ignore_index = PAD_TOKEN),

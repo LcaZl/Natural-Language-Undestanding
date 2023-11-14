@@ -28,7 +28,7 @@ sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
-DEVICE = 'cpu'
+DEVICE = 'cuda:0'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
 INFO_ENABLED = False
@@ -128,6 +128,7 @@ def load_dataset():
     test_loader = DataLoader(test_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
 
     print(' - Aspects labels :', lang.aspect2id)
+    print(' - Polarity labels :', lang.pol2id)
     print(' - Vocabulary size:', lang.vocab_size)
     print(' - Special tokens (CLS e SEP ids):', lang.cls_token_id, lang.sep_token_id)
     print(' - Raw sent:', train_raw[0])
@@ -188,6 +189,7 @@ class Lang:
     
     def decode_asppol(self, data):
         decoded_seq = []
+        
         for tok in data:
             tok = str(tok)
             if len(tok) == 2:
@@ -195,7 +197,8 @@ class Lang:
                 pol = self.id2pol[int(tok[1])]
                 decoded_seq.append(f'{asp}-{pol}')
             else:
-                decoded_seq.append(self.id2aspect[1])
+                assert int(tok) == 0
+                decoded_seq.append('O')
 
         return decoded_seq
     
@@ -326,7 +329,6 @@ class Dataset(data.Dataset):
 
     def __getitem__(self, idx):
         if INFO_ENABLED:
-            df = pd.DataFrame
             print('----------------------------- Sample ', idx, '-----------------------------')
             print('- Sent Ids         :', self.utt_ids[idx])
             print('- Aspects ids      :', self.asp_ids[idx])
@@ -392,6 +394,8 @@ def collate_fn(data):
     new_item["attention_mask"] = attention_mask
     new_item['token_type_ids'] = token_type_ids
 
-    sample = {'utterances': text.shape, 'yaspects':y_aspects.shape, 'ypolarities':y_aspects.shape,'attention_mask':attention_mask.shape, 'y_asppol':y_asp_pol.shape}
-    print('-   Collate_fn :', sample)
+    if INFO_ENABLED:
+        sample = {'utterances': text.shape, 'yaspects':y_aspects.shape, 'ypolarities':y_aspects.shape,'attention_mask':attention_mask.shape, 'y_asppol':y_asp_pol.shape}
+        print('-   Collate_fn :', sample)
+
     return new_item
