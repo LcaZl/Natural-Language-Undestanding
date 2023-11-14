@@ -190,16 +190,17 @@ class Lang:
     def decode_asppol(self, data):
         decoded_seq = []
 
-        
+        print('data:',data)
         for tok in data:
-            tok = str(tok)
-            if len(tok) == 2:
-                asp = self.id2aspect[int(tok[0])]
-                pol = self.id2pol[int(tok[1])]
-                decoded_seq.append(f'{asp}-{pol}')
-            else:
-                
-                decoded_seq.append('O')
+            if tok != -1:
+                tok = str(tok)
+                if len(tok) == 2:
+                    asp = self.id2aspect[int(tok[0])]
+                    pol = self.id2pol[int(tok[1])]
+                    decoded_seq.append(f'{asp}-{pol}')
+                else:
+                    
+                    decoded_seq.append('O')
 
         return decoded_seq
     
@@ -396,7 +397,7 @@ def collate_fn(data):
     new_item["attention_mask"] = attention_mask
     new_item['token_type_ids'] = token_type_ids
 
-    if INFO_ENABLED:
+    if not INFO_ENABLED:
         sample = {'utterances': text.shape, 'yaspects':y_aspects.shape, 'ypolarities':y_aspects.shape,'attention_mask':attention_mask.shape, 'y_asppol':y_asp_pol.shape}
         print('-   Collate_fn :', sample)
 
