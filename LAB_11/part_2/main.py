@@ -21,7 +21,7 @@ if __name__ == "__main__":
             'n_splits':10,
             'optimizer':'Adam',
             'dropout': 0.10,
-            'learning_rate': 0.0001,
+            'learning_rate': 5e-5,
             'grid_search':False,
             'grid_search_parameters': grid_search_parameters,
             'criterion':nn.CrossEntropyLoss(),
