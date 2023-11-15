@@ -160,9 +160,11 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
 
 def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
     attention_mask = sample['attention_mask'][:,1:-1]
-    aspect_logits = torch.argmax(aspect_logits[:,1:-1,:], dim=-1)
-    polarity_logits = polarity_logits[:,1:-1,:]
+    aspect_logits = aspect_logits[:,1:-1,:] * attention_mask.unsqueeze(-1)
+    polarity_logits = polarity_logits[:,1:-1,:] * attention_mask.unsqueeze(-1)
+
     aspect_mask = (sample['y_aspects'][:, 1:-1] != 1) & (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
+
     print(' - attention_mask:', attention_mask.shape, '\n',attention_mask)
     print(' - aspect_logits:', aspect_logits.shape, '\n',aspect_logits)
     print(' - polarity_logits:', polarity_logits.shape, '\n',polarity_logits)
@@ -173,70 +175,40 @@ def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
     print(' - flat_aspect_logits:', flat_aspect_logits.shape, '\n',flat_aspect_logits)
     print(' - flat_aspect_labels:', flat_aspect_labels.shape, '\n',flat_aspect_labels)
    
-    pred_ot = flat_aspect_logits[aspect_mask.view(-1)]
+    pred_ot = torch.argmax(flat_aspect_logits[aspect_mask.view(-1)], dim=-1)
     gold_ot = flat_aspect_labels[aspect_mask.view(-1)]
 
     print('- gold_ot:', gold_ot.shape, '', gold_ot)
     print('- pred_ot:', pred_ot.shape, '\n', pred_ot)
 
-    pred_ot = [parameters['lang'].decode_aspects(el[mask]) for el, mask in pred_ot]
-    gold_ot = [parameters['lang'].decode_aspects(el[mask]) for el, mask in gold_ot]
+    pred_ot = parameters['lang'].decode_aspects(pred_ot.tolist()) 
+    gold_ot = parameters['lang'].decode_aspects(gold_ot.tolist()) 
 
-    print('- gold_ot:', len(gold_ot[0]), '', gold_ot[0])
-    print('- pred_ot:', len(pred_ot[0]), '\n', pred_ot[0])
+    print('- gold_ot:', len(gold_ot), '', gold_ot)
+    print('- pred_ot:', len(pred_ot), '\n', pred_ot)
 
-    exit(0)
-    print('polarity_logit:', polarity_logits)
-    print('aspect_logit', aspect_logits)
-    gold_ot = sample['y_aspects'][:, 1:-1].contiguous()
-    pred_ot = torch.argmax(aspect_logits, dim=-1)
-    aspect_mask = (pred_ot != parameters['lang'].aspect2id['O']) & attention_mask.bool()
-    aspect_mask = aspect_mask.bool().cpu().numpy()
-    
-    print('- gold_ot:', len(gold_ot[0]), '', gold_ot[0])
-    print('- pred_ot:', len(pred_ot[0]), '\n', pred_ot[0])
-    print('- aspect_mask:', len(aspect_mask[0]), '\n', aspect_mask[0])
-    # Filtra i token di padding dalle etichette d'oro e dalle predizioni
+    flat_polarity_logits = polarity_logits.contiguous().view(-1, polarity_logits.shape[-1])
+    flat_polarity_labels = sample['y_asppol'][:, 1:-1].contiguous().view(-1)
+    print(' - flat_polarity_logits:', flat_polarity_logits.shape, '\n',flat_polarity_logits)
+    print(' - flat_polarity_labels:', flat_polarity_labels.shape, '\n',flat_polarity_labels)
 
-    gold_ot = [parameters['lang'].decode_aspects(el[mask]) for el, mask in zip(gold_ot.cpu().numpy(), attention_mask.cpu().numpy())]
-    pred_ot = [parameters['lang'].decode_aspects(el[mask]) for el, mask in zip(pred_ot.cpu().numpy(), attention_mask.cpu().numpy())]
+    selected_polarity_logits = torch.argmax(flat_polarity_logits[aspect_mask.view(-1)], dim=-1)
+    gold_ts = parameters['lang'].decode_asppol(flat_polarity_labels[aspect_mask.view(-1)].tolist())
+    print(' - selected_polarity_logits:', selected_polarity_logits.shape, '\n',selected_polarity_logits)
+    print(' - gold_ts:', len(gold_ts), '\n',gold_ts)
 
-    print('- gold_ot:', len(gold_ot[0]), '', gold_ot[0])
-    print('- pred_ot:', len(pred_ot[0]), '\n', pred_ot[0])
-    #print(evaluate_ote(gold_ot, pred_ot))
+    pols = parameters['lang'].decode_polarities(selected_polarity_logits.tolist())
+    print('- pols:', len(pols), '\n', pols)
 
-    gold_ts_2 = sample['y_asppol'][:, 1:-1].contiguous()
-    pred_ts_2 = torch.argmax(polarity_logits, dim=-1)
-    print('gold_ts_2',len(gold_ts_2[0]),'',gold_ts_2[0])
-    print('pred_ts_2',len(pred_ts_2[0]),'',pred_ts_2[0])
-
-    gold_ts_1 = [parameters['lang'].decode_asppol(el[mask]) for el, mask in zip(gold_ts_2.cpu().numpy(), attention_mask.cpu().numpy())]
-    pred_ts_1 = [parameters['lang'].decode_polarities(el[mask]) for el, mask in zip(pred_ts_2.cpu().numpy(), attention_mask.cpu().numpy())]
-    
-    print('gold_ts_1',len(gold_ts_1[0]),'',gold_ts_1[0])
-    print('pred_ts_1',len(pred_ts_1[0]),'',pred_ts_1[0])
-    
     pred_ts = []
-    gold_ts = []
-    for idx in range(0, len(pred_ot)):
-        tmp_p = []
-        tmp_g = []
-        for ot, ts, g_ts, is_aspect in zip(pred_ot[idx], pred_ts_1[idx], gold_ts_1[idx], aspect_mask[idx]):
-            if is_aspect:
-                label = f'{ot}-{ts}'
-                tmp_p.append(label)
-            else:
-                tmp_p.append('O')
-            tmp_g.append(g_ts)
-        pred_ts.append(tmp_p)
-        gold_ts.append(tmp_g)
+    for ot, ts in zip(pred_ot, pols):
+        pred_ts.append(f'{ot}-{ts}')
 
-    print('pred_ot',len(pred_ot[0]),'',pred_ot[0])
-    print('-mask   :',aspect_mask[0])
-    print('-gold_ot:',gold_ot[0])
-    print('-pred_ot:',pred_ot[0])
-    print('-gold_ts:',gold_ts[0])
-    print('-pred_ts:',pred_ts[0])
+    print('- pred_ts:', len(pred_ts), '\n', pred_ts)
+    print('-gold_ot:',gold_ot)
+    print('-pred_ot:',pred_ot)
+    print('-gold_ts:',gold_ts)
+    print('-pred_ts:',pred_ts)
     print(evaluate_ote(gold_ot, pred_ot))
     print(evaluate_ts(gold_ts, pred_ts))
     exit(0)

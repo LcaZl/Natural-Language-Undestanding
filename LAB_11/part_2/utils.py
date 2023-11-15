@@ -29,7 +29,7 @@ sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
 
-DEVICE = 'cpu'
+DEVICE = 'cuda:0'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
 INFO_ENABLED = False
@@ -123,6 +123,7 @@ def load_dataset():
 
     for _, _, pol_tags in train_set:
         v = len(pol_tags)
+        
         if v == 0 or v == 1 or v == 2 or v == 3:
             stratify_labels.append(v)
         elif len(pol_tags) > 3:
