@@ -123,7 +123,6 @@ def load_dataset():
 
     for _, _, pol_tags in train_set:
         v = len(pol_tags)
-        
         if v == 0 or v == 1 or v == 2 or v == 3:
             stratify_labels.append(v)
         elif len(pol_tags) > 3:
@@ -160,6 +159,7 @@ def load_dataset():
 
         aspect_weights = calculate_inverse_weights(aspect_frequencies)
         polarity_weights = calculate_inverse_weights(polarity_frequencies)
+        polarity_weights = {0: 0.4, 1: 0.4, 2: 0.2}
         print(' - Aspect frequencies:', aspect_frequencies, ' - Weigth:', aspect_weights) 
         print(' - Polarity frequencies:', polarity_frequencies, ' - Weigth:', polarity_weights) 
 

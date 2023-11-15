@@ -21,7 +21,7 @@ if __name__ == "__main__":
             'n_splits':10,
             'optimizer':'Adam',
             'dropout': 0,
-            'learning_rate': 5e-4,
+            'learning_rate': 1e-4,
             'grid_search':False,
             'grid_search_parameters': grid_search_parameters,
             'lang':lang,
