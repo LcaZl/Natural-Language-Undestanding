@@ -5,7 +5,7 @@ from nltk.corpus import wordnet
 from nltk import pos_tag
 from nltk.corpus import sentiwordnet as swn
 from nltk.sentiment.util import mark_negation
-from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 from nltk.sentiment import SentimentIntensityAnalyzer
 import torch.utils.data as data
 import pandas as pd
@@ -13,6 +13,7 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from nltk.sentiment.util import mark_negation
 from transformers import BertTokenizer
+from nltk.stem import WordNetLemmatizer
 
 nltk.download('vader_lexicon')
 nltk.download('sentiwordnet')
@@ -28,11 +29,13 @@ sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
 
-DEVICE = 'cuda:0'
+DEVICE = 'cpu'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
 INFO_ENABLED = False
 BERT_MAX_LEN = 512
+
+PRINTABLE = 3
 
 def read_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -43,6 +46,7 @@ def read_file(file_path):
 
 def process_raw_data(dataset):
     new_dataset = []
+    lemmatizer = WordNetLemmatizer()
 
     for sample in dataset:
 
@@ -69,7 +73,6 @@ def process_raw_data(dataset):
                         aspect_tags.append('S')  # Inizio di un aspetto
                     else:
                         aspect_tags.append('S')  # Continuazione di un aspetto
-
                 else:
 
                     if is_in_aspect:
@@ -84,6 +87,8 @@ def process_raw_data(dataset):
                 aspect_tags[-1] = 'S'
                 pol_tags.append((aspect_start_index, len(words_tagged) - 1, pol_tag))  # Presumiamo NEU se non specificato
 
+            #text = [word.lower() for word in text if word.isalpha()]
+            #text = [lemmatizer.lemmatize(word) for word in text]
             new_dataset.append((' '.join(text), aspect_tags, pol_tags))
 
             if INFO_ENABLED:
@@ -93,8 +98,13 @@ def process_raw_data(dataset):
                 print('- Polarities:', pol_tags, '\n')    
 
     return new_dataset
-
-
+import math
+def calculate_inverse_weights(frequencies):
+    total_count = sum(frequencies.values())
+    weights = {label: total_count / (freq + math.e) for label, freq in frequencies.items()}
+    total_weight = sum(weights.values())
+    normalized_weights = {label: weight / total_weight for label, weight in weights.items()}
+    return normalized_weights
 
 def load_dataset():
     print(f'\nLoading Dataset Laptop 14...')
@@ -106,23 +116,60 @@ def load_dataset():
     test_set = process_raw_data(test_raw)
 
     lang = Lang()
-    skf = KFold(n_splits=10, random_state=42, shuffle = True)
-    fold_datasets = []  # This will store the dataset splits
 
-    for k, (train_indices, val_indices) in enumerate(skf.split(train_set)):
+    skf = StratifiedKFold(n_splits=10, random_state=42, shuffle = True)
+    fold_datasets = []  # This will store the dataset splits
+    stratify_labels = []
+
+    for _, _, pol_tags in train_set:
+        v = len(pol_tags)
+        if v == 0 or v == 1 or v == 2 or v == 3:
+            stratify_labels.append(v)
+        elif len(pol_tags) > 3:
+            stratify_labels.append(4)
+    count = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0, 6:0}
+    for l in stratify_labels:
+        count[l] += 1
+
+
+    #print(count)
+
+    for k, (train_indices, val_indices) in enumerate(skf.split(train_set, stratify_labels)):
 
         train_samples = [train_set[idx] for idx in train_indices]
         val_samples = [train_set[idx] for idx in val_indices]
 
-        print(f' - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
+        print(f'\n - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
 
         train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
 
+        # Inizializza i dizionari per il conteggio delle frequenze
+        aspect_frequencies = {id : 0 for id, asp in lang.id2aspect.items()}
+        polarity_frequencies = {id : 0 for id, asp in lang.id2pol.items()}
+
+        # Aggiorna il conteggio per ogni campione nel dataset
+        for aspect_tags, pol_tags in zip(train_dataset.asp_ids, train_dataset.pol_ids):
+            for aspect in aspect_tags:
+                if aspect in aspect_frequencies:
+                    aspect_frequencies[aspect] += 1
+            for pol in pol_tags:
+                if pol in polarity_frequencies:
+                    polarity_frequencies[pol] += 1
+
+        aspect_weights = calculate_inverse_weights(aspect_frequencies)
+        polarity_weights = calculate_inverse_weights(polarity_frequencies)
+        print(' - Aspect frequencies:', aspect_frequencies, ' - Weigth:', aspect_weights) 
+        print(' - Polarity frequencies:', polarity_frequencies, ' - Weigth:', polarity_weights) 
+
         train_loader = DataLoader(train_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
         val_loader = DataLoader(val_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
         
-        fold_datasets.append((train_loader, val_loader))
+        aspect_weights_tensor = torch.tensor(list(aspect_weights.values())).to(DEVICE)
+        polarity_weights_tensor = torch.tensor(list(polarity_weights.values())).to(DEVICE)
+
+        fold_datasets.append((train_loader, val_loader, aspect_weights_tensor, polarity_weights_tensor))
+        #print(aspect_weights_tensor, polarity_weights_tensor) 
 
     test_dataset = Dataset(test_set, lang)
     test_loader = DataLoader(test_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
@@ -153,10 +200,11 @@ class Lang:
         self.sep_token_id = self.tokenizer.sep_token_id
         self.aspol_pad_id = -1
 
-        self.aspect2id = {'[PAD]':self.aspol_pad_id, 'O':0, 'B':1, 'I':2, 'E':3, 'S':4}
+        self.aspect2id = {'O':0, 'B':1, 'I':2, 'E':3, 'S':4}
         self.id2aspect = {id: label for label, id in self.aspect2id.items()}
         self.aspect_labels = len(self.aspect2id)
-        self.pol2id = {'[PAD]':self.aspol_pad_id,'POS': 0, 'NEG': 1, 'NEU': 2}
+
+        self.pol2id = {'POS': 0, 'NEG': 1, 'NEU': 2}
         self.id2pol = {id: label for label, id in self.pol2id.items()}
         self.polarity_labels = len(self.pol2id)
 
@@ -201,7 +249,7 @@ class Lang:
                 else:
                     
                     decoded_seq.append('O')
-
+        print('decoded data:',decoded_seq)
         return decoded_seq
     
 class Dataset(data.Dataset):
@@ -209,6 +257,7 @@ class Dataset(data.Dataset):
         self.lang = lang
         self.utt_ids, self.asp_ids, self.pol_ids, self.asp_pol_ids, self.asp_pol_indexes, self.attention_masks, self.token_types = self.prepare_data(dataset)
         self.first = True
+        self.print_sample = 0
 
     def prepare_data(self, dataset):
 
@@ -330,7 +379,7 @@ class Dataset(data.Dataset):
         return len(self.utt_ids)
 
     def __getitem__(self, idx):
-        if INFO_ENABLED:
+        if self.print_sample < PRINTABLE:
             print('----------------------------- Sample ', idx, '-----------------------------')
             print('- Sent Ids         :', self.utt_ids[idx])
             print('- Aspects ids      :', self.asp_ids[idx])
@@ -340,7 +389,7 @@ class Dataset(data.Dataset):
             print('- Asp. Pol. Indexes:', self.asp_pol_indexes[idx])
             print('- Attention mask   :', self.attention_masks[idx])
             print('- Token type ids   :', self.token_types[idx])
-
+            self.print_sample += 1
         sample =  {
             'text': torch.tensor(self.utt_ids[idx]),
             'aspects': torch.tensor(self.asp_ids[idx]),
@@ -354,13 +403,13 @@ class Dataset(data.Dataset):
         return sample
 
 def collate_fn(data):
-    def merge(sequences, bert = False):
+    def merge(sequences):
         '''
         merge from batch * sent_len to batch * max_len 
         '''
         lengths = [min(len(seq), BERT_MAX_LEN) for seq in sequences]  # Capture effective lengths but ensure they don't exceed 512
         max_len = 1 if max(lengths)==0 else max(lengths)
-        padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(PAD_TOKEN if bert else -1)
+        padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(PAD_TOKEN)
         
         for i, seq in enumerate(sequences):
             end = lengths[i]  # Use the effective length for padding
@@ -374,7 +423,7 @@ def collate_fn(data):
     for key in data[0].keys():
         new_item[key] = [d[key] for d in data]
 
-    text, y_lengths = merge(new_item['text'], bert = True)
+    text, y_lengths = merge(new_item['text'])
     y_aspects, _ = merge(new_item["aspects"]) 
     y_polarities, _ = merge(new_item["polarities"]) 
     y_asp_pol, _ = merge(new_item['asp_pol_ids'])
@@ -398,7 +447,11 @@ def collate_fn(data):
     new_item['token_type_ids'] = token_type_ids
 
     if not INFO_ENABLED:
-        sample = {'utterances': text.shape, 'yaspects':y_aspects.shape, 'ypolarities':y_aspects.shape,'attention_mask':attention_mask.shape, 'y_asppol':y_asp_pol.shape}
+        sample = {'utterances': text.shape, 
+                  'yaspects':y_aspects.shape, 
+                  'ypolarities':y_aspects.shape,
+                  'attention_mask':attention_mask.shape, 
+                  'y_asppol':y_asp_pol.shape}
         print('-   Collate_fn :', sample)
 
     return new_item

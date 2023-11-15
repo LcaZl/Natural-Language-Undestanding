@@ -88,8 +88,11 @@ def train_lm(parameters):
         losses[loss_idx] = []
         model, optimizer = init_model(parameters)
 
-        train_loader, dev_loader = parameters['train_folds'][i]
+        train_loader, dev_loader, asp_weight, pol_weight = parameters['train_folds'][i]
 
+        parameters['asp_criterion'] = nn.CrossEntropyLoss(weight = asp_weight, ignore_index = PAD_TOKEN)
+        parameters['pol_criterion'] = nn.CrossEntropyLoss(weight = pol_weight, ignore_index = PAD_TOKEN)
+        
         loss = train_loop(train_loader, optimizer, model, parameters)
         losses[loss_idx].append(loss)
 
@@ -115,44 +118,79 @@ def train_lm(parameters):
 
 
 def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
-    #print('- sample[attention_mask]:', sample['attention_mask'].shape, '\n', sample['attention_mask'])
-
-    attention_mask = sample['attention_mask'][:,1:-1]
-    aspect_logits = aspect_logits[:,1:-1,:]
-    polarity_logits = polarity_logits[:,1:-1,:]
-
-    # Crea una maschera per i token di padding nelle etichette di aspetto e polarità
-    aspect_label_mask = sample['y_aspects'][:, 1:-1] != parameters['lang'].aspol_pad_id
-    polarity_label_mask = sample['y_polarities'][:, 1:-1] != parameters['lang'].aspol_pad_id
-
-    # Combina la maschera delle etichette con l'attention mask
-    aspect_mask = aspect_label_mask & attention_mask.bool()
-    polarity_mask = polarity_label_mask & attention_mask.bool()
+    attention_mask = sample['attention_mask'][:, 1:-1]
+    aspect_logits = aspect_logits[:, 1:-1, :] * attention_mask.unsqueeze(-1)
+    polarity_logits = polarity_logits[:, 1:-1, :] * attention_mask.unsqueeze(-1)
+    
+    #print(' - attention_mask:', attention_mask.shape, '\n',attention_mask)
+    #print(' - aspect_logits:', aspect_logits.shape, '\n',aspect_logits)
+    #print(' - polarity_logits:', polarity_logits.shape, '\n',polarity_logits)
+    # Maschera per gli aspetti identificati
+    aspect_mask = (sample['y_aspects'][:, 1:-1] != 1) & (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
+    #print(' - aspect_mask:', aspect_mask.shape, '\n',aspect_mask)
 
     # Calcolo della perdita per gli aspetti
     flat_aspect_logits = aspect_logits.contiguous().view(-1, aspect_logits.shape[-1])
     flat_aspect_labels = sample['y_aspects'][:, 1:-1].contiguous().view(-1)
-    aspect_loss = parameters['criterion'](flat_aspect_logits[aspect_mask.view(-1)], flat_aspect_labels[aspect_mask.view(-1)])
+    selected_aspect_logits = flat_aspect_logits[aspect_mask.view(-1)]
+    selected_aspect_labels = flat_aspect_labels[aspect_mask.view(-1)]
+    aspect_loss = parameters['asp_criterion'](selected_aspect_logits, selected_aspect_labels)
+    #print(' - flat_aspect_logits:', flat_aspect_logits.shape, '\n',flat_aspect_logits)
+    #print(' - flat_aspect_labels:', flat_aspect_labels.shape, '\n',flat_aspect_labels)
+    #print(' - selected_aspect_logits:', selected_aspect_logits.shape, '\n',selected_aspect_logits)
+    #print(' - selected_aspect_labels:', selected_aspect_labels.shape, '\n',selected_aspect_labels)
+    #print(' - aspect_loss:', aspect_loss)
 
     # Calcolo della perdita per le polarità
     flat_polarity_logits = polarity_logits.contiguous().view(-1, polarity_logits.shape[-1])
     flat_polarity_labels = sample['y_polarities'][:, 1:-1].contiguous().view(-1)
-    selected_polarity_logits = flat_polarity_logits[polarity_mask.view(-1)]
-    selected_polarity_labels = flat_polarity_labels[polarity_mask.view(-1)]
-    polarity_loss = parameters['criterion'](selected_polarity_logits, selected_polarity_labels)
+    selected_polarity_logits = flat_polarity_logits[aspect_mask.view(-1)]
+    selected_polarity_labels = flat_polarity_labels[aspect_mask.view(-1)]
+    polarity_loss = parameters['pol_criterion'](selected_polarity_logits, selected_polarity_labels)
+    #print(' - flat_polarity_logits:', flat_polarity_logits.shape, '\n',flat_polarity_logits)
+    #print(' - flat_polarity_labels:', flat_polarity_labels.shape, '\n',flat_polarity_labels)
+    #print(' - selected_polarity_logits:', selected_polarity_logits.shape, '\n',selected_polarity_logits)
+    #print(' - selected_polarity_labels:', selected_polarity_labels.shape, '\n',selected_polarity_labels)
+    #print(' - polarity_loss:', polarity_loss)
 
     loss = aspect_loss + polarity_loss
-    print('- total_loss:', loss)
+    #print(' - loss:', loss)
+
     return loss
 
 def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
     attention_mask = sample['attention_mask'][:,1:-1]
-    aspect_logits = aspect_logits[:,1:-1,:]
+    aspect_logits = torch.argmax(aspect_logits[:,1:-1,:], dim=-1)
     polarity_logits = polarity_logits[:,1:-1,:]
+    aspect_mask = (sample['y_aspects'][:, 1:-1] != 1) & (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
+    print(' - attention_mask:', attention_mask.shape, '\n',attention_mask)
+    print(' - aspect_logits:', aspect_logits.shape, '\n',aspect_logits)
+    print(' - polarity_logits:', polarity_logits.shape, '\n',polarity_logits)
+    print('- aspect_mask:', aspect_mask.shape, '\n', aspect_mask)
 
+    flat_aspect_logits = aspect_logits.contiguous().view(-1, aspect_logits.shape[-1])
+    flat_aspect_labels = sample['y_aspects'][:, 1:-1].contiguous().view(-1)
+    print(' - flat_aspect_logits:', flat_aspect_logits.shape, '\n',flat_aspect_logits)
+    print(' - flat_aspect_labels:', flat_aspect_labels.shape, '\n',flat_aspect_labels)
+   
+    pred_ot = flat_aspect_logits[aspect_mask.view(-1)]
+    gold_ot = flat_aspect_labels[aspect_mask.view(-1)]
+
+    print('- gold_ot:', gold_ot.shape, '', gold_ot)
+    print('- pred_ot:', pred_ot.shape, '\n', pred_ot)
+
+    pred_ot = [parameters['lang'].decode_aspects(el[mask]) for el, mask in pred_ot]
+    gold_ot = [parameters['lang'].decode_aspects(el[mask]) for el, mask in gold_ot]
+
+    print('- gold_ot:', len(gold_ot[0]), '', gold_ot[0])
+    print('- pred_ot:', len(pred_ot[0]), '\n', pred_ot[0])
+
+    exit(0)
+    print('polarity_logit:', polarity_logits)
+    print('aspect_logit', aspect_logits)
     gold_ot = sample['y_aspects'][:, 1:-1].contiguous()
     pred_ot = torch.argmax(aspect_logits, dim=-1)
-    aspect_mask = (pred_ot != parameters['lang'].aspect2id['O']) & attention_mask
+    aspect_mask = (pred_ot != parameters['lang'].aspect2id['O']) & attention_mask.bool()
     aspect_mask = aspect_mask.bool().cpu().numpy()
     
     print('- gold_ot:', len(gold_ot[0]), '', gold_ot[0])
@@ -169,8 +207,8 @@ def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
 
     gold_ts_2 = sample['y_asppol'][:, 1:-1].contiguous()
     pred_ts_2 = torch.argmax(polarity_logits, dim=-1)
-    #print('gold_ts_2',len(gold_ts_2[0]),'',gold_ts_2[0])
-    #print('pred_ts_2',len(pred_ts_2[0]),'',pred_ts_2[0])
+    print('gold_ts_2',len(gold_ts_2[0]),'',gold_ts_2[0])
+    print('pred_ts_2',len(pred_ts_2[0]),'',pred_ts_2[0])
 
     gold_ts_1 = [parameters['lang'].decode_asppol(el[mask]) for el, mask in zip(gold_ts_2.cpu().numpy(), attention_mask.cpu().numpy())]
     pred_ts_1 = [parameters['lang'].decode_polarities(el[mask]) for el, mask in zip(pred_ts_2.cpu().numpy(), attention_mask.cpu().numpy())]
@@ -193,15 +231,16 @@ def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
         pred_ts.append(tmp_p)
         gold_ts.append(tmp_g)
 
-    #print('gold_ts',len(gold_ts),'',gold_ts)
     print('pred_ot',len(pred_ot[0]),'',pred_ot[0])
-    #print(evaluate_ts(gold_ts, pred_ot))
     print('-mask   :',aspect_mask[0])
     print('-gold_ot:',gold_ot[0])
     print('-pred_ot:',pred_ot[0])
     print('-gold_ts:',gold_ts[0])
     print('-pred_ts:',pred_ts[0])
-    #exit(0)
+    print(evaluate_ote(gold_ot, pred_ot))
+    print(evaluate_ts(gold_ts, pred_ts))
+    exit(0)
+
     return gold_ot, gold_ts, pred_ot, pred_ts
 
 def train_loop(data_loader, optimizer, model, parameters):
@@ -223,7 +262,7 @@ def train_loop(data_loader, optimizer, model, parameters):
         else:
             P -= 1
             if P == 0:
-                break;
+                break
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
         optimizer.step()
