@@ -110,7 +110,7 @@ if __name__ == "__main__":
     pol_model, pol_training_report = train_model(training_parameters['polarity_model'])
     print('\nOutput:\n',tabulate(pol_training_report, headers='keys', tablefmt='grid', showindex=True))
 
-    print('\nStart filtering subjective sentences of movie review by subjectivy ...\n')
+    print('\nStart filtering subjective sentences of movie review ...\n')
     mr4subj_fold_dataset, _, mr4subj_lang = load_dataset('movie_review_4subjectivity', skf, test_size, args = [subj_lang])
 
     print('\nFiltering sentences of movie reviews ...')
@@ -125,7 +125,7 @@ if __name__ == "__main__":
         'hidden_layer_size':836,
         'embedding_layer_size' : 836,
         'bidirectional':False,
-        'grid_search':True,
+        'grid_search':False,
         'vocab_size': mr2_lang.vocab_size,
         'train_folds':mr2_fold_dataset,
         'test_loader':mr2_test,

@@ -161,7 +161,7 @@ def train_model(parameters):
             torch.save(data_to_save, model_filename)
 
     cols = ['Fold','Run','F1-score', 'Accuracy']
-    training_report = pd.DataFrame(list(reports), columns=cols).set_index('Fold')
+    training_report = pd.DataFrame(reports, columns=cols).set_index('Fold')
 
     return model, training_report
 
@@ -169,6 +169,7 @@ def train_model(parameters):
 
 
 def train_lm(parameters):
+    cols = ['Fold','Run','F1-score', 'Accuracy']
     losses = {}
     reports = []
     best_score = 0
@@ -177,8 +178,9 @@ def train_lm(parameters):
 
         print(f'\nFOLD {i}:')
         train_loader, dev_loader = parameters['train_folds'][i]
+        fold_reports = []
 
-        pbar = tqdm(range(0, len(parameters['runs'])))
+        pbar = tqdm(range(0, parameters['runs']))
         for r in pbar:
 
             model, optimizer = init_model(parameters)
@@ -186,8 +188,9 @@ def train_lm(parameters):
             losses[loss_idx] = []
             P = 3
             S = 0
+            score, report = None, None
 
-            for epoch in range(parameters['epochs']):   
+            for epoch in range(0, parameters['epochs']):   
 
                 loss = train_loop(train_loader, optimizer, model, parameters)
                 losses[loss_idx].append(loss)
@@ -204,15 +207,18 @@ def train_lm(parameters):
                     if P <= 0:
                         break
 
-                pbar.set_description(f'Run {r} - Epoch {epoch} - Report:{report}')
+                pbar.set_description(f'Run {r} - Epoch {epoch} - L: {loss} - S:{score} - Report:{report}')
 
             _, score, report = evaluation(model, parameters, parameters['test_loader'])
             report = [i] + [r] + report
             reports.append(report)
-
+            fold_reports.append(report)
             if score > best_score:
                 best_score = score
                 best_model = (model, report)
+
+        fold_df = pd.DataFrame(fold_reports, columns=cols).set_index('Fold')
+        print(tabulate(fold_df, headers='keys', tablefmt='grid', showindex=True))
 
     return best_model, reports, losses
 
@@ -222,7 +228,7 @@ def evaluation(model, parameters, dataset):
 
     f = round(report['macro avg']['f1-score'], 3)
     acc = round(report['accuracy'], 3)
-    score = np.mean(f, acc)
+    score = round(np.mean([f, acc]), 2)
     report = [f, acc]
     return loss, score, report
 
