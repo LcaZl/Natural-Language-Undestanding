@@ -126,9 +126,9 @@ def train_lm(parameters):
                     best_score = score
                     best_model = (model, report)
 
-        fold_df = pd.DataFrame(fold_reports, columns=cols)
+        fold_df = pd.DataFrame(fold_reports, columns=cols).set_index('fold')
         print(tabulate(fold_df, headers='keys', tablefmt='grid', showindex=True))
-
+        print(best_model[1])
     return best_model, reports, losses
 
 def evaluation(model, parameters, dataset):

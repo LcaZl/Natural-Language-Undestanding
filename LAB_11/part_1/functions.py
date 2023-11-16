@@ -209,15 +209,18 @@ def train_lm(parameters):
                 pbar.set_description(f'Run {r} - Epoch {epoch} - L: {loss} - S:{score} - Report:{report}')
 
             _, score, report = evaluation(model, parameters, parameters['test_loader'])
+
             report = [i] + [r] + report
             reports.append(report)
             fold_reports.append(report)
+
             if score > best_score:
                 best_score = score
                 best_model = (model, report)
 
         fold_df = pd.DataFrame(fold_reports, columns=cols).set_index('Fold')
         print(tabulate(fold_df, headers='keys', tablefmt='grid', showindex=True))
+        print(best_model[1])
 
     return best_model, reports, losses
 
