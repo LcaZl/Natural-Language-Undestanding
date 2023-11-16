@@ -106,8 +106,7 @@ def train_lm(parameters):
                 losses[loss_idx].append(loss)
 
                 if epoch % 2 == 0:
-                    loss, score, report = evaluation(model, parameters, dev_loader)
-                    losses[loss_idx].append(loss)
+                    _, score, report = evaluation(model, parameters, dev_loader)
 
                     if score > S:
                         S = score
