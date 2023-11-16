@@ -129,7 +129,10 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - aspect_logits:', aspect_logits.shape, '\n',aspect_logits)
     #print(' - polarity_logits:', polarity_logits.shape, '\n',polarity_logits)
     # Maschera per gli aspetti identificati
-    aspect_mask = (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
+    
+    predicted_aspect_labels = torch.argmax(aspect_logits, dim=-1)
+    aspect_mask = ((sample['y_aspects'][:, 1:-1] != parameters['lang'].aspect2id['O']) | (predicted_aspect_labels != parameters['lang'].aspect2id['O'])) & attention_mask.bool()
+    #aspect_mask = (sample['y_aspects'][:, 1:-1] != parameters['lang'].aspect2id['O']) & attention_mask.bool()
     #aspect_mask = attention_mask.bool()
 
     #print(' - aspect_mask:', aspect_mask.shape, '\n',aspect_mask)
@@ -168,7 +171,10 @@ def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
     aspect_logits = aspect_logits[:, 1:-1, :] * attention_mask.unsqueeze(-1)
     polarity_logits = polarity_logits[:, 1:-1, :] * attention_mask.unsqueeze(-1)
 
-    aspect_mask = (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
+    predicted_aspect_labels = torch.argmax(aspect_logits, dim=-1)
+    aspect_mask = ((sample['y_aspects'][:, 1:-1] != parameters['lang'].aspect2id['O']) | (predicted_aspect_labels != parameters['lang'].aspect2id['O'])) & attention_mask.bool()
+
+    #aspect_mask = (sample['y_aspects'][:, 1:-1] != parameters['lang'].aspect2id['O']) & attention_mask.bool()
     #aspect_mask = attention_mask.bool()
 
     # Estrazione delle predizioni e delle etichette per gli aspetti

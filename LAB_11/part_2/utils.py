@@ -103,7 +103,7 @@ def calculate_inverse_weights(frequencies, lang):
     total_count = sum(frequencies.values())
     weights = {label: total_count / (freq + math.e) for label, freq in frequencies.items()}
     total_weight = sum(weights.values())
-    normalized_weights = {label: weight / total_weight for label, weight in weights.items()}
+    normalized_weights = {label: round(weight / total_weight, 3) for label, weight in weights.items()}
     return normalized_weights
 
 def load_dataset(skf):
@@ -198,13 +198,12 @@ class Lang:
 
         self.cls_token_id = self.tokenizer.cls_token_id
         self.sep_token_id = self.tokenizer.sep_token_id
-        self.aspol_pad_id = -1
 
         self.aspect2id = {'O':0, 'B':1, 'I':2, 'E':3, 'S':4}
         self.id2aspect = {id: label for label, id in self.aspect2id.items()}
         self.aspect_labels = len(self.aspect2id)
 
-        self.pol2id = {'O':0, 'POS': 1, 'NEG': 2, 'NEU': 3}
+        self.pol2id = {'POS': 0, 'NEG': 1, 'NEU': 2}
         self.id2pol = {id: label for label, id in self.pol2id.items()}
         self.polarity_labels = len(self.pol2id)
 
@@ -364,7 +363,7 @@ class Dataset(data.Dataset):
             print('- Decoded al. en. Aspects :', self.lang.decode_aspects(aligned_aspect))
 
         aligned_asp_pol = self.lang.decode_aspects(aligned_aspect)
-        aligned_polarity = [self.lang.pol2id['O']] * len(input_ids)
+        aligned_polarity = [self.lang.pol2id['NEU']] * len(input_ids)
 
         for pol in asp_pol_indexes:
             for i in range(pol[0], pol[1] + 1):
