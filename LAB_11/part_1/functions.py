@@ -61,15 +61,16 @@ def grid_search(parameters):
         
         f = b_model[1][1]
         acc = b_model[1][2]
+        score = (f + acc) / 2
 
         print(f'- Best model performance -  Score F1: {b_model[1][1]} - Accuracy: {b_model[1][2]}\n')
         
-        if f > best_score:
+        if score > best_score:
             best_model_reports = reports
             best_params = combined_parameters
             best_model = b_model 
             best_losses = losses
-            best_score = f
+            best_score = score
 
     print('\nEnd grid search:')
     print(f' - Best parameters: ',{key: combined_parameters[key] for key in best_params.keys() if key in best_params['grid_search_parameters'].keys()},'\n')
@@ -159,7 +160,7 @@ def train_model(parameters):
             }
             torch.save(data_to_save, model_filename)
 
-    cols = ['Fold', 'F1-score', 'Accuracy']
+    cols = ['Fold','Run','F1-score', 'Accuracy']
     training_report = pd.DataFrame(list(reports), columns=cols).set_index('Fold')
 
     return model, training_report
@@ -172,34 +173,58 @@ def train_lm(parameters):
     reports = []
     best_score = 0
 
-    pbar = tqdm(range(0,parameters['n_splits']))
-    for i in pbar:
-        loss_idx = f'Fold_{i}'
-        losses[loss_idx] = []
-        model, optimizer = init_model(parameters)
+    for i in range(0,parameters['n_splits']):
 
+        print(f'\nFOLD {i}:')
         train_loader, dev_loader = parameters['train_folds'][i]
 
-        loss = train_loop(train_loader, optimizer, model, parameters)
-        losses[loss_idx].append(loss)
+        pbar = tqdm(range(0, len(parameters['runs'])))
+        for r in pbar:
 
-        loss, report = eval_loop(dev_loader, model, parameters)
-        losses[loss_idx].append(loss)
+            model, optimizer = init_model(parameters)
+            loss_idx = f'Fold_{i}'
+            losses[loss_idx] = []
+            P = 3
+            S = 0
 
-        loss, report = eval_loop(parameters['test_loader'], model, parameters)
-        losses[loss_idx].append(loss)
+            for epoch in range(parameters['epochs']):   
 
-        f = round(report['macro avg']['f1-score'], 3)
-        acc = round(report['accuracy'], 3)
-        reports.append([i, f, acc])
+                loss = train_loop(train_loader, optimizer, model, parameters)
+                losses[loss_idx].append(loss)
 
-        if f > best_score:
-            best_score = f
-            best_model = (model, [i, f, acc])
-        
-        pbar.set_description(f'FOLD {i+1} - F1:{f} - A: {acc}')
-    
+                if epoch % 2:
+                    loss, score, report = evaluation(model, parameters, dev_loader)
+                    losses[loss_idx].append(loss)
+                    
+                    if score > S:
+                        S = score
+                    else:
+                        P -= 1
+
+                    if P <= 0:
+                        break
+
+                pbar.set_description(f'Run {r} - Epoch {epoch} - Report:{report}')
+
+            _, score, report = evaluation(model, parameters, parameters['test_loader'])
+            report = [i] + [r] + report
+            reports.append(report)
+
+            if score > best_score:
+                best_score = score
+                best_model = (model, report)
+
     return best_model, reports, losses
+
+def evaluation(model, parameters, dataset):
+
+    loss, report = eval_loop(dataset, model, parameters)
+
+    f = round(report['macro avg']['f1-score'], 3)
+    acc = round(report['accuracy'], 3)
+    score = np.mean(f, acc)
+    report = [f, acc]
+    return loss, score, report
 
 def train_loop(data_loader, optimizer, model, parameters):
     model.train()

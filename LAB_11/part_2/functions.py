@@ -72,53 +72,74 @@ def train_model(parameters):
         }
         torch.save(data_to_save, model_filename)
 
-    cols = ['Fold', 'ot_precision', 'ot_recall', 'ot_f1', 'ts_macro_f1', 'ts_micro_p', 'ts_micro_r', 'ts_micro_f1']
+    cols = ['Fold', 'Run', 'ot_precision', 'ot_recall', 'ot_f1', 'ts_macro_f1', 'ts_micro_p', 'ts_micro_r', 'ts_micro_f1']
     training_report = pd.DataFrame(reports, columns=cols).set_index('Fold')
 
     return model, training_report, best_report
 
 def train_lm(parameters):
+
     losses = {}
     reports = []
     best_score = 0
 
-    pbar = tqdm(range(0, len(parameters['train_folds'])))
-    for i in pbar:
-        loss_idx = f'Fold_{i}'
-        losses[loss_idx] = []
-        model, optimizer = init_model(parameters)
+    for i in range(0, len(parameters['train_folds'])):
 
+        print(f'\nFOLD {i}:')
         train_loader, dev_loader, asp_weight, pol_weight = parameters['train_folds'][i]
 
         parameters['asp_criterion'] = nn.CrossEntropyLoss(weight = asp_weight, ignore_index = PAD_TOKEN)
         parameters['pol_criterion'] = nn.CrossEntropyLoss(weight = pol_weight, ignore_index = PAD_TOKEN)
+        
+        pbar = tqdm(range(0, parameters['runs']))
+        for r in pbar:
 
-        for j in range(parameters['epochs']):        
-            loss = train_loop(train_loader, optimizer, model, parameters)
-            losses[loss_idx].append(loss)
+            model, optimizer = init_model(parameters)
+            loss_idx = f'fold_{i}-run_{r}'
+            losses[loss_idx] = []
+            P = 3
+            S = 0
 
-            loss, ote_report, ts_report = eval_loop(dev_loader, model, parameters)
-            report = ote_report + ts_report
-            losses[loss_idx].append(loss)
+            for epoch in range(parameters['epochs']):        
+                loss = train_loop(train_loader, optimizer, model, parameters)
+                losses[loss_idx].append(loss)
 
-            ts_f = round(ts_report[0], 3)
-            ts_prec = round(ts_report[1], 3)
-            ot_f = round(ote_report[2], 3)
-            ot_prec = round(ote_report[0], 3)
+                if epoch % 2 == 0:
+                    loss, score, report = evaluation(model, parameters, dev_loader)
+                    losses[loss_idx].append(loss)
+
+                    if score > S:
+                        S = score
+                    else:
+                        P -= 1
+
+                    if P <= 0:
+                        break
+                                    
+                pbar.set_description(f'Run {r} - Epoch {epoch} - Report:{report}')
+
+            _, score, report = evaluation(model, parameters, parameters['test_loader'])
+            report = [i] + [r] + report
+            reports.append(report)
             
-            pbar.set_description(f'FOLD {i} - Epoch {j} - ot_F1:{ot_f} - ot_P:{ot_prec} - ts_MaF1:{ts_f} - ts_MiP:{ts_prec}')
-
-        loss, ote_report, ts_report = eval_loop(parameters['test_loader'], model, parameters)
-        report = ote_report + ts_report
-        losses[loss_idx].append(loss)
-
-        reports.append([i] + list(report))
-        if ts_f > best_score:
-                best_score = ts_f
-                best_model = (model, [i] + list(report))
+            if score > best_score:
+                    best_score = score
+                    best_model = (model, report)
 
     return best_model, reports, losses
 
+def evaluation(model, parameters, dataset):
+    loss, ote_report, ts_report = eval_loop(dataset, model, parameters)
+
+    ot_f = round(ote_report[2], 3)
+    ot_prec = round(ote_report[0], 3)
+    ts_f = round(ts_report[0], 3)
+    ts_prec = round(ts_report[1], 3)
+
+    score = np.mean(ot_f, ot_prec, ts_f, ts_prec), 3
+    report = list(ote_report + ts_report)
+
+    return loss, score, report
 
 def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     attention_mask = sample['attention_mask'][:, 1:-1]

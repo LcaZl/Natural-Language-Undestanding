@@ -55,6 +55,8 @@ if __name__ == "__main__":
     training_baseline = {
             'clip':5,
             'n_splits':10,
+            'epochs':10,
+            'runs':5,
             'output_size':1,
             'criterion': nn.BCEWithLogitsLoss(),
             'optimizer':'Adam',
