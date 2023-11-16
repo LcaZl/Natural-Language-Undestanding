@@ -159,7 +159,6 @@ def load_dataset():
 
         aspect_weights = calculate_inverse_weights(aspect_frequencies)
         polarity_weights = calculate_inverse_weights(polarity_frequencies)
-        polarity_weights = {0: 0.4, 1: 0.4, 2: 0.2}
         print(' - Aspect frequencies:', aspect_frequencies, ' - Weigth:', aspect_weights) 
         print(' - Polarity frequencies:', polarity_frequencies, ' - Weigth:', polarity_weights) 
 
@@ -205,7 +204,7 @@ class Lang:
         self.id2aspect = {id: label for label, id in self.aspect2id.items()}
         self.aspect_labels = len(self.aspect2id)
 
-        self.pol2id = {'POS': 0, 'NEG': 1, 'NEU': 2}
+        self.pol2id = {'O':0, 'POS': 1, 'NEG': 2, 'NEU': 3}
         self.id2pol = {id: label for label, id in self.pol2id.items()}
         self.polarity_labels = len(self.pol2id)
 
@@ -367,12 +366,12 @@ class Dataset(data.Dataset):
             print('- Decoded al. en. Aspects :', self.lang.decode_aspects(aligned_aspect))
 
         aligned_asp_pol = self.lang.decode_aspects(aligned_aspect)
-        aligned_polarity = [self.lang.pol2id['NEU']] * len(input_ids)
+        aligned_polarity = [self.lang.pol2id['O']] * len(input_ids)
 
         for pol in asp_pol_indexes:
             for i in range(pol[0], pol[1] + 1):
                 aligned_polarity[i] = self.lang.pol2id[pol[2]]
-                aligned_asp_pol[i] = aligned_asp_pol[i] + f'-{pol[2]}'
+                aligned_asp_pol[i] = f'{aligned_asp_pol[i]}-{pol[2]}'
 
         return aligned_aspect, aligned_polarity, self.lang.encode_asppol(aligned_asp_pol), asp_pol_indexes
     
@@ -447,7 +446,7 @@ def collate_fn(data):
     new_item["attention_mask"] = attention_mask
     new_item['token_type_ids'] = token_type_ids
 
-    if not INFO_ENABLED:
+    if INFO_ENABLED:
         sample = {'utterances': text.shape, 
                   'yaspects':y_aspects.shape, 
                   'ypolarities':y_aspects.shape,

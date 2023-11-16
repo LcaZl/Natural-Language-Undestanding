@@ -92,23 +92,24 @@ def train_lm(parameters):
 
         parameters['asp_criterion'] = nn.CrossEntropyLoss(weight = asp_weight, ignore_index = PAD_TOKEN)
         parameters['pol_criterion'] = nn.CrossEntropyLoss(weight = pol_weight, ignore_index = PAD_TOKEN)
-        
-        loss = train_loop(train_loader, optimizer, model, parameters)
-        losses[loss_idx].append(loss)
 
-        loss, ote_report, ts_report = eval_loop(dev_loader, model, parameters)
-        losses[loss_idx].append(loss)
+        for j in range(1):        
+            loss = train_loop(train_loader, optimizer, model, parameters)
+            losses[loss_idx].append(loss)
 
-        f = round(ts_report[0], 3)
-        recall = round(ts_report[2], 3)
-        prec = round(ts_report[1], 3)
-        fm = round(ts_report[3], 3)
+            loss, ote_report, ts_report = eval_loop(dev_loader, model, parameters)
+            losses[loss_idx].append(loss)
+
+            f = round(ts_report[0], 3)
+            recall = round(ts_report[2], 3)
+            prec = round(ts_report[1], 3)
+            fm = round(ts_report[3], 3)
+            
+            pbar.set_description(f'FOLD/epoch {i+1}-{j+1} - F1:{f} - P:{prec} - R:{recall} - F1M:{fm}')
 
         if f > best_score:
-            best_score = f
-            best_model = model
-        
-        pbar.set_description(f'FOLD {i+1} - F1:{f} - P:{prec} - R:{recall} - F1M:{fm}')
+                best_score = f
+                best_model = model
 
     loss, ote_report, ts_report = eval_loop(parameters['test_loader'], best_model, parameters)
     losses[loss_idx].append(loss)
@@ -126,7 +127,7 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - aspect_logits:', aspect_logits.shape, '\n',aspect_logits)
     #print(' - polarity_logits:', polarity_logits.shape, '\n',polarity_logits)
     # Maschera per gli aspetti identificati
-    aspect_mask = (sample['y_aspects'][:, 1:-1] != 1) & (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
+    aspect_mask = (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
     #print(' - aspect_mask:', aspect_mask.shape, '\n',aspect_mask)
 
     # Calcolo della perdita per gli aspetti
@@ -142,6 +143,8 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - aspect_loss:', aspect_loss)
 
     # Calcolo della perdita per le polarità
+    aspect_mask = (sample['y_aspects'][:, 1:-1] != 0) & (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
+
     flat_polarity_logits = polarity_logits.contiguous().view(-1, polarity_logits.shape[-1])
     flat_polarity_labels = sample['y_polarities'][:, 1:-1].contiguous().view(-1)
     selected_polarity_logits = flat_polarity_logits[aspect_mask.view(-1)]
@@ -153,73 +156,53 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - selected_polarity_labels:', selected_polarity_labels.shape, '\n',selected_polarity_labels)
     #print(' - polarity_loss:', polarity_loss)
 
-    loss = aspect_loss + polarity_loss
-    #print(' - loss:', loss)
+    loss = (0.6 * aspect_loss) + (0.4 * polarity_loss)
+    print(' - loss:', loss)
 
     return loss
 
 def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
-    attention_mask = sample['attention_mask'][:,1:-1]
-    aspect_logits = aspect_logits[:,1:-1,:] * attention_mask.unsqueeze(-1)
-    polarity_logits = polarity_logits[:,1:-1,:] * attention_mask.unsqueeze(-1)
+    attention_mask = sample['attention_mask'][:, 1:-1]
+    aspect_logits = aspect_logits[:, 1:-1, :] * attention_mask.unsqueeze(-1)
+    polarity_logits = polarity_logits[:, 1:-1, :] * attention_mask.unsqueeze(-1)
 
-    aspect_mask = (sample['y_aspects'][:, 1:-1] != 1) & (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
+    aspect_mask = attention_mask.bool()
 
-    print(' - attention_mask:', attention_mask.shape, '\n',attention_mask)
-    print(' - aspect_logits:', aspect_logits.shape, '\n',aspect_logits)
-    print(' - polarity_logits:', polarity_logits.shape, '\n',polarity_logits)
-    print('- aspect_mask:', aspect_mask.shape, '\n', aspect_mask)
+    # Estrazione delle predizioni e delle etichette per gli aspetti
+    pred_ot_list = []
+    gold_ot_list = []
+    for i in range(aspect_logits.size(0)):
+        pred_ot = torch.argmax(aspect_logits[i][aspect_mask[i]], dim=-1)
+        gold_ot = sample['y_aspects'][i, 1:-1][aspect_mask[i]]
+        pred_ot_list.append(parameters['lang'].decode_aspects(pred_ot.tolist()))
+        gold_ot_list.append(parameters['lang'].decode_aspects(gold_ot.tolist()))
 
-    flat_aspect_logits = aspect_logits.contiguous().view(-1, aspect_logits.shape[-1])
-    flat_aspect_labels = sample['y_aspects'][:, 1:-1].contiguous().view(-1)
-    print(' - flat_aspect_logits:', flat_aspect_logits.shape, '\n',flat_aspect_logits)
-    print(' - flat_aspect_labels:', flat_aspect_labels.shape, '\n',flat_aspect_labels)
-   
-    pred_ot = torch.argmax(flat_aspect_logits[aspect_mask.view(-1)], dim=-1)
-    gold_ot = flat_aspect_labels[aspect_mask.view(-1)]
+    # Estrazione delle predizioni e delle etichette per le polarità
+    pred_ts_list = []
+    gold_ts_list = []
+    for i in range(polarity_logits.size(0)):
+        selected_polarity_logits = torch.argmax(polarity_logits[i][aspect_mask[i]], dim=-1)
+        gold_ts = sample['y_asppol'][i, 1:-1][aspect_mask[i]]
+        pols = parameters['lang'].decode_polarities(selected_polarity_logits.tolist())
+        gold_ts_decoded = parameters['lang'].decode_asppol(gold_ts.tolist())
+        pred_ts = [f'{ot}-{ts}' for ot, ts in zip(pred_ot_list[i], pols)]
+        pred_ts_list.append(pred_ts)
+        gold_ts_list.append(gold_ts_decoded)
 
-    print('- gold_ot:', gold_ot.shape, '', gold_ot)
-    print('- pred_ot:', pred_ot.shape, '\n', pred_ot)
+    # Stampa dei risultati e valutazione
+    print('-gold_ot:', gold_ot_list)
+    print('-pred_ot:', pred_ot_list)
+    print('-gold_ts:', gold_ts_list)
+    print('-pred_ts:', pred_ts_list)
+    print(evaluate_ote(gold_ot_list, pred_ot_list))
+    print(evaluate_ts(gold_ts_list, pred_ts_list))
 
-    pred_ot = parameters['lang'].decode_aspects(pred_ot.tolist()) 
-    gold_ot = parameters['lang'].decode_aspects(gold_ot.tolist()) 
+    return gold_ot_list, gold_ts_list, pred_ot_list, pred_ts_list
 
-    print('- gold_ot:', len(gold_ot), '', gold_ot)
-    print('- pred_ot:', len(pred_ot), '\n', pred_ot)
-
-    flat_polarity_logits = polarity_logits.contiguous().view(-1, polarity_logits.shape[-1])
-    flat_polarity_labels = sample['y_asppol'][:, 1:-1].contiguous().view(-1)
-    print(' - flat_polarity_logits:', flat_polarity_logits.shape, '\n',flat_polarity_logits)
-    print(' - flat_polarity_labels:', flat_polarity_labels.shape, '\n',flat_polarity_labels)
-
-    selected_polarity_logits = torch.argmax(flat_polarity_logits[aspect_mask.view(-1)], dim=-1)
-    gold_ts = parameters['lang'].decode_asppol(flat_polarity_labels[aspect_mask.view(-1)].tolist())
-    print(' - selected_polarity_logits:', selected_polarity_logits.shape, '\n',selected_polarity_logits)
-    print(' - gold_ts:', len(gold_ts), '\n',gold_ts)
-
-    pols = parameters['lang'].decode_polarities(selected_polarity_logits.tolist())
-    print('- pols:', len(pols), '\n', pols)
-
-    pred_ts = []
-    for ot, ts in zip(pred_ot, pols):
-        pred_ts.append(f'{ot}-{ts}')
-
-    print('- pred_ts:', len(pred_ts), '\n', pred_ts)
-    print('-gold_ot:',gold_ot)
-    print('-pred_ot:',pred_ot)
-    print('-gold_ts:',gold_ts)
-    print('-pred_ts:',pred_ts)
-    print(evaluate_ote(gold_ot, pred_ot))
-    print(evaluate_ts(gold_ts, pred_ts))
-    exit(0)
-
-    return gold_ot, gold_ts, pred_ot, pred_ts
 
 def train_loop(data_loader, optimizer, model, parameters):
     model.train()
     losses = []
-    P = 3
-    best_loss = math.inf
     for sample in data_loader:
         optimizer.zero_grad()
         aspect_logits, polarity_logits = model(sample['texts'], sample['attention_mask'], None)
@@ -228,13 +211,6 @@ def train_loop(data_loader, optimizer, model, parameters):
 
         losses.append(loss.item())
 
-        if loss.item() < best_loss:
-            best_loss = loss.item()
-            P = 3
-        else:
-            P -= 1
-            if P == 0:
-                break
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
         optimizer.step()
