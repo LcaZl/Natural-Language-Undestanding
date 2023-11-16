@@ -37,13 +37,11 @@ def preprocess(dataset, label, mark_neg = True, file_id = 0):
         text = ' '.join(sent)
 
         vscore = sia.polarity_scores(text)['compound']
-        if vscore <= -0.6:
+        if vscore <= -0.5:
             vscore = 'VNEG'  # Molto negativo
-        elif vscore <= -0.2:
+        elif vscore <= 0:
             vscore = 'NEG'  # Negativo
-        elif vscore <= 0.2:
-            vscore = 'NET'  # Neutrale
-        elif vscore <= 0.6:
+        elif vscore <= 0.5 :
             vscore = 'POS'  # Positivo
         else:
             vscore = 'VPOS'  # Molto positivo

@@ -8,7 +8,7 @@ if __name__ == "__main__":
     #Wrtite the code to load the datasets and to run your functions
     # Print the results
 
-    skf = StratifiedKFold(n_splits=10, random_state=42, shuffle = True)
+    skf = StratifiedKFold(n_splits=5, random_state=42, shuffle = True)
     folds, test_loader, lang = load_dataset(skf)
 
     parameters = {
@@ -16,7 +16,7 @@ if __name__ == "__main__":
             'clip':5,
             'epochs': 200,
             'n_splits':10,
-            'runs':5,
+            'runs':3,
             'optimizer':'Adam',
             'dropout': 0.1,
             'learning_rate': 5e-5,

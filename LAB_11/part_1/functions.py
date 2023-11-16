@@ -155,8 +155,9 @@ def train_model(parameters):
         if (parameters['task'] != 'polarity_detection_with_filtered_dataset'):
             data_to_save = {
                 'model_state': model.state_dict(),
-                'report': best_model[1],
-                'parameters':best_params
+                'best_report': best_model[1],
+                'parameters':best_params,
+                'report':reports
             }
             torch.save(data_to_save, model_filename)
 
