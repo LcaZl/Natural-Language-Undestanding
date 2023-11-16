@@ -29,7 +29,7 @@ sia = SentimentIntensityAnalyzer()
 # Parameters
 PAD_TOKEN = 0
 
-DEVICE = 'cuda:0'
+DEVICE = 'cuda'
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
 INFO_ENABLED = False
@@ -78,14 +78,14 @@ def process_raw_data(dataset):
                     if is_in_aspect:
                         # Fine dell'aspetto corrente
                         aspect_tags[-1] = 'S'
-                        pol_tags.append((aspect_start_index, i-1, pol_tag))  # Presumiamo NEU se non specificato
+                        pol_tags.append((aspect_start_index, i-1, pol_tag))
                         is_in_aspect = False
                     aspect_tags.append('O')
 
             # Controlla se il sample finisce con un aspetto
             if is_in_aspect:
                 aspect_tags[-1] = 'S'
-                pol_tags.append((aspect_start_index, len(words_tagged) - 1, pol_tag))  # Presumiamo NEU se non specificato
+                pol_tags.append((aspect_start_index, len(words_tagged) - 1, pol_tag))
 
             #text = [word.lower() for word in text if word.isalpha()]
             #text = [lemmatizer.lemmatize(word) for word in text]
@@ -131,7 +131,6 @@ def load_dataset(skf):
     for l in stratify_labels:
         count[l] += 1
 
-
     #print(count)
 
     for k, (train_indices, val_indices) in enumerate(skf.split(train_set, stratify_labels)):
@@ -162,17 +161,14 @@ def load_dataset(skf):
         print(' - Aspects frequencies:', aspect_frequencies, '\n - Aspects weigth:', aspect_weights) 
         print(' - Polarities frequencies:', polarity_frequencies, '\n - Polarities weigth:', polarity_weights) 
 
-        train_loader = DataLoader(train_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
-        val_loader = DataLoader(val_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
+        train_loader = DataLoader(train_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size = 32, shuffle = True, collate_fn = collate_fn)
         
-        aspect_weights_tensor = torch.tensor(list(aspect_weights.values())).to(DEVICE)
-        polarity_weights_tensor = torch.tensor(list(polarity_weights.values())).to(DEVICE)
-
-        fold_datasets.append((train_loader, val_loader, aspect_weights_tensor, polarity_weights_tensor))
+        fold_datasets.append((train_loader, val_loader, list(aspect_weights.values()), list(polarity_weights.values())))
         #print(aspect_weights_tensor, polarity_weights_tensor) 
 
     test_dataset = Dataset(test_set, lang)
-    test_loader = DataLoader(test_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
 
     print(' - Aspects labels :', lang.aspect2id)
     print(' - Polarity labels :', lang.pol2id)
@@ -203,7 +199,7 @@ class Lang:
         self.id2aspect = {id: label for label, id in self.aspect2id.items()}
         self.aspect_labels = len(self.aspect2id)
 
-        self.pol2id = {'POS': 0, 'NEG': 1, 'NEU': 2}
+        self.pol2id = {'O':0 ,'POS': 1, 'NEG': 2, 'NEU': 3}
         self.id2pol = {id: label for label, id in self.pol2id.items()}
         self.polarity_labels = len(self.pol2id)
 
@@ -245,7 +241,6 @@ class Lang:
                     pol = self.id2pol[int(tok[1])]
                     decoded_seq.append(f'{asp}-{pol}')
                 else:
-                    
                     decoded_seq.append('O')
         return decoded_seq
     
@@ -363,7 +358,7 @@ class Dataset(data.Dataset):
             print('- Decoded al. en. Aspects :', self.lang.decode_aspects(aligned_aspect))
 
         aligned_asp_pol = self.lang.decode_aspects(aligned_aspect)
-        aligned_polarity = [self.lang.pol2id['NEU']] * len(input_ids)
+        aligned_polarity = [self.lang.pol2id['O']] * len(input_ids)
 
         for pol in asp_pol_indexes:
             for i in range(pol[0], pol[1] + 1):

@@ -77,25 +77,25 @@ def grid_search(parameters):
 
     return best_model, best_model_reports, best_losses, best_params
 
-def init_weights(m):
-    if isinstance(m, nn.RNN):
-        # Initialize the RNN layers
-        for name, param in m.named_parameters():
-            if 'weight_ih' in name:
-                # Xavier initialization for input to hidden weights
-                init.xavier_uniform_(param.data)
-            elif 'weight_hh' in name:
-                # Orthogonal initialization for hidden to hidden weights
-                init.orthogonal_(param.data)
-            elif 'bias' in name:
-                # Zero initialization for biases
-                init.zeros_(param.data)
-    elif isinstance(m, nn.Linear):
-        # Kaiming initialization for the linear layers
-        init.kaiming_uniform_(m.weight, nonlinearity='relu')
-        if m.bias is not None:
-            # Zero initialization for the linear layer biases
-            init.zeros_(m.bias)
+def init_weights(mat):
+    for m in mat.modules():
+        if type(m) in [nn.GRU, nn.LSTM, nn.RNN]:
+            for name, param in m.named_parameters():
+                if 'weight_ih' in name:
+                    for idx in range(4):
+                        mul = param.shape[0]//4
+                        torch.nn.init.xavier_uniform_(param[idx*mul:(idx+1)*mul])
+                elif 'weight_hh' in name:
+                    for idx in range(4):
+                        mul = param.shape[0]//4
+                        torch.nn.init.orthogonal_(param[idx*mul:(idx+1)*mul])
+                elif 'bias' in name:
+                    param.data.fill_(0)
+        else:
+            if type(m) in [nn.Linear]:
+                torch.nn.init.uniform_(m.weight, -0.01, 0.01)
+                if m.bias != None:
+                    m.bias.data.fill_(0.01)
 
 def init_model(parameters, model_state = None):
 
@@ -165,9 +165,6 @@ def train_model(parameters):
 
     return model, training_report
 
-
-
-
 def train_lm(parameters):
     cols = ['Fold','Run','F1-score', 'Accuracy']
     losses = {}
@@ -180,6 +177,7 @@ def train_lm(parameters):
         train_loader, dev_loader = parameters['train_folds'][i]
         fold_reports = []
 
+        score, report = None, None
         pbar = tqdm(range(0, parameters['runs']))
         for r in pbar:
 
@@ -188,14 +186,13 @@ def train_lm(parameters):
             losses[loss_idx] = []
             P = 3
             S = 0
-            score, report = None, None
 
             for epoch in range(0, parameters['epochs']):   
 
                 loss = train_loop(train_loader, optimizer, model, parameters)
                 losses[loss_idx].append(loss)
 
-                if epoch % 2:
+                if epoch % 5:
                     _, score, report = evaluation(model, parameters, dev_loader)
                     
                     if score > S:
@@ -227,10 +224,9 @@ def train_lm(parameters):
 def evaluation(model, parameters, dataset):
 
     loss, report = eval_loop(dataset, model, parameters)
-
-    f = round(report['macro avg']['f1-score'], 3)
-    acc = round(report['accuracy'], 3)
-    score = round(np.mean([f, acc]), 2)
+    f = round(report['macro avg']['f1-score'], 4)
+    acc = round(report['accuracy'], 4)
+    score = round(np.mean([f, acc]), 4)
     report = [f, acc]
     return loss, score, report
 

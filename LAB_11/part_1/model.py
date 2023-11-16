@@ -56,5 +56,4 @@ class SUBJ_Model(nn.Module):
             # Concatenare il vader score feature con gli stati nascosti
             hidden = torch.cat((hidden, vader_feature), dim=1)
         
-        # hidden => [batch size, hid dim]
         return self.fc(hidden)  # [batch size, output dim]

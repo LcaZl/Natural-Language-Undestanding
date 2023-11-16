@@ -78,7 +78,8 @@ def train_model(parameters):
     return model, training_report, best_report
 
 def train_lm(parameters):
-
+    runs = parameters['runs']
+    epochs = parameters['epochs']
     losses = {}
     reports = []
     best_score = 0
@@ -89,8 +90,10 @@ def train_lm(parameters):
         print(f'\nFOLD {i}:')
         train_loader, dev_loader, asp_weight, pol_weight = parameters['train_folds'][i]
         fold_reports = []
-        parameters['asp_criterion'] = nn.CrossEntropyLoss(weight = asp_weight, ignore_index = PAD_TOKEN)
-        parameters['pol_criterion'] = nn.CrossEntropyLoss(weight = pol_weight, ignore_index = PAD_TOKEN)
+
+        parameters['asp_criterion'] = nn.CrossEntropyLoss(weight = torch.tensor(asp_weight).to(DEVICE))
+        parameters['pol_criterion'] = nn.CrossEntropyLoss(weight = torch.tensor(pol_weight).to(DEVICE))
+        
         score, report = None, None
         pbar = tqdm(range(0, parameters['runs']))
         for r in pbar:
@@ -105,7 +108,7 @@ def train_lm(parameters):
                 loss = train_loop(train_loader, optimizer, model, parameters)
                 losses[loss_idx].append(loss)
 
-                if epoch % 2 == 0:
+                if epoch % 5 == 0:
                     _, score, report = evaluation(model, parameters, dev_loader)
 
                     if score > S:
@@ -116,7 +119,7 @@ def train_lm(parameters):
                     if P <= 0:
                         break
                                     
-                pbar.set_description(f'Run {r} - Epoch {epoch} - L: {loss} - S:{score} - Report:{report}')
+                pbar.set_description(f'Run {r}/{runs} - Epoch {epoch}/{epochs} - L: {loss} - S:{score} - Report:{report}')
 
             _, score, report = evaluation(model, parameters, parameters['test_loader'])
             report = [i] + [r] + report
@@ -126,7 +129,7 @@ def train_lm(parameters):
                     best_score = score
                     best_model = (model, report)
 
-        fold_df = pd.DataFrame(fold_reports, columns=cols).set_index('fold')
+        fold_df = pd.DataFrame(fold_reports, columns=cols).set_index('Fold')
         print(tabulate(fold_df, headers='keys', tablefmt='grid', showindex=True))
         print(best_model[1])
     return best_model, reports, losses
@@ -139,23 +142,19 @@ def evaluation(model, parameters, dataset):
     ts_f = round(ts_report[0], 3)
     ts_prec = round(ts_report[1], 3)
     score = round(np.mean([ot_f, ot_prec, ts_f, ts_prec]), 2)
-    report = list(ote_report + ts_report)
+    report = [round(el, 3) for el in (ote_report + ts_report)]
 
     return loss, score, report
 
 def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     attention_mask = sample['attention_mask'][:, 1:-1]
-    aspect_logits = aspect_logits[:, 1:-1, :] * attention_mask.unsqueeze(-1)
-    polarity_logits = polarity_logits[:, 1:-1, :] * attention_mask.unsqueeze(-1)
+    aspect_logits = aspect_logits[:, 1:-1, :]
+    polarity_logits = polarity_logits[:, 1:-1, :]
     
     #print(' - attention_mask:', attention_mask.shape, '\n',attention_mask)
     #print(' - aspect_logits:', aspect_logits.shape, '\n',aspect_logits)
     #print(' - polarity_logits:', polarity_logits.shape, '\n',polarity_logits)
     # Maschera per gli aspetti identificati
-    
-    #predicted_aspect_labels = torch.argmax(aspect_logits, dim=-1)
-    #aspect_mask = ((sample['y_aspects'][:, 1:-1] != parameters['lang'].aspect2id['O']) | (predicted_aspect_labels != parameters['lang'].aspect2id['O'])) & attention_mask.bool()
-    #aspect_mask = (sample['y_aspects'][:, 1:-1] != parameters['lang'].aspect2id['O']) & attention_mask.bool()
     aspect_mask = attention_mask.bool()
 
     #print(' - aspect_mask:', aspect_mask.shape, '\n',aspect_mask)
@@ -173,6 +172,8 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - aspect_loss:', aspect_loss)
 
     # Calcolo della perdita per le polarità
+    aspect_mask = attention_mask.bool()
+    
     flat_polarity_logits = polarity_logits.contiguous().view(-1, polarity_logits.shape[-1])
     flat_polarity_labels = sample['y_polarities'][:, 1:-1].contiguous().view(-1)
     selected_polarity_logits = flat_polarity_logits[aspect_mask.view(-1)]
@@ -191,13 +192,8 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
 
 def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
     attention_mask = sample['attention_mask'][:, 1:-1]
-    aspect_logits = aspect_logits[:, 1:-1, :] * attention_mask.unsqueeze(-1)
-    polarity_logits = polarity_logits[:, 1:-1, :] * attention_mask.unsqueeze(-1)
-
-    #predicted_aspect_labels = torch.argmax(aspect_logits, dim=-1)
-    #aspect_mask = ((sample['y_aspects'][:, 1:-1] != parameters['lang'].aspect2id['O']) | (predicted_aspect_labels != parameters['lang'].aspect2id['O'])) & attention_mask.bool()
-
-    #aspect_mask = (sample['y_aspects'][:, 1:-1] != parameters['lang'].aspect2id['O']) & attention_mask.bool()
+    aspect_logits = aspect_logits[:, 1:-1, :]
+    polarity_logits = polarity_logits[:, 1:-1, :]
     aspect_mask = attention_mask.bool()
 
     # Estrazione delle predizioni e delle etichette per gli aspetti
@@ -210,6 +206,7 @@ def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
         gold_ot_list.append(parameters['lang'].decode_aspects(gold_ot.tolist()))
 
     # Estrazione delle predizioni e delle etichette per le polarità
+    aspect_mask = attention_mask.bool()
     pred_ts_list = []
     gold_ts_list = []
     for i in range(polarity_logits.size(0)):
@@ -217,7 +214,7 @@ def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
         gold_ts = sample['y_asppol'][i, 1:-1][aspect_mask[i]]
         pols = parameters['lang'].decode_polarities(selected_polarity_logits.tolist())
         gold_ts_decoded = parameters['lang'].decode_asppol(gold_ts.tolist())
-        pred_ts = [f'{ot}-{ts}' for ot, ts in zip(pred_ot_list[i], pols)]
+        pred_ts = [f'{ot}-{ts}' if ot != 'O' and ts != 'O' else 'O' for ot, ts in zip(pred_ot_list[i], pols)]
         pred_ts_list.append(pred_ts)
         gold_ts_list.append(gold_ts_decoded)
 

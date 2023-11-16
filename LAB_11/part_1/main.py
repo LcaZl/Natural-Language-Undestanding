@@ -33,9 +33,9 @@ if __name__ == "__main__":
     #Wrtite the code to load the datasets and to run your functions
     # Print the results
 
-    vocab_size = 12000
     test_size = 0.1 # Train, dev, test
-    skf = StratifiedKFold(n_splits=10, random_state=42, shuffle = True)
+    FOLDS = 10
+    skf = StratifiedKFold(n_splits=FOLDS, random_state=42, shuffle = True)
 
     print('Loading datasets ...\n')
 
@@ -54,8 +54,8 @@ if __name__ == "__main__":
 
     training_baseline = {
             'clip':5,
-            'n_splits':10,
-            'epochs':10,
+            'n_splits':FOLDS,
+            'epochs':200,
             'runs':5,
             'output_size':1,
             'criterion': nn.BCEWithLogitsLoss(),
@@ -69,7 +69,7 @@ if __name__ == "__main__":
 
             'task':'subjectivity_detection',
 
-            'learning_rate': 0.001,
+            'learning_rate': 0.0005,
             'hidden_layer_size':200,
             'embedding_layer_size' : 300,
             'bidirectional':True,   
@@ -110,7 +110,6 @@ if __name__ == "__main__":
     pol_model, pol_training_report = train_model(training_parameters['polarity_model'])
     print('\nOutput:\n',tabulate(pol_training_report, headers='keys', tablefmt='grid', showindex=True))
 
-    print('\nStart filtering subjective sentences of movie review ...\n')
     mr4subj_fold_dataset, _, mr4subj_lang = load_dataset('movie_review_4subjectivity', skf, test_size, args = [subj_lang])
 
     print('\nFiltering sentences of movie reviews ...')
@@ -125,14 +124,13 @@ if __name__ == "__main__":
         'hidden_layer_size':836,
         'embedding_layer_size' : 836,
         'bidirectional':False,
+        'dropout':0.1,
         'grid_search':False,
         'vocab_size': mr2_lang.vocab_size,
         'train_folds':mr2_fold_dataset,
         'test_loader':mr2_test,
         'lang':mr2_lang, 
         'vader_score': False
-
-
     }
     
     pol2_model, pol2_training_report = train_model(training_parameters['polarity_model_no_obj'])
@@ -146,6 +144,4 @@ if __name__ == "__main__":
 
     # Unisci i DataFrame utilizzando l'indice 'Fold'
     combined_report = pd.concat([subj_training_report.sort_index(), pol_training_report.sort_index(), pol2_training_report.sort_index()], axis=1)
-
-
     print('\nComaprison:\n',tabulate(combined_report, headers='keys', tablefmt='grid', showindex=True))

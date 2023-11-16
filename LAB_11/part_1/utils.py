@@ -84,7 +84,7 @@ def filter_movie_reviews(filter):
     return new_mr
     
 def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
-    print(f'Loading Dataset {dataset_name}...')
+    print(f'\nLoading Dataset {dataset_name}...')
 
     if dataset_name == 'Subjectivity':
 
