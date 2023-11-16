@@ -18,6 +18,7 @@ if __name__ == "__main__":
     parameters = {
             'task': 'ABSA',
             'clip':5,
+            'epochs': 5,
             'n_splits':10,
             'optimizer':'Adam',
             'dropout': 0,

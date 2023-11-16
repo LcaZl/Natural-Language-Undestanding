@@ -238,7 +238,6 @@ class Lang:
     def decode_asppol(self, data):
         decoded_seq = []
 
-        print('data:',data)
         for tok in data:
             if tok != -1:
                 tok = str(tok)
@@ -249,7 +248,6 @@ class Lang:
                 else:
                     
                     decoded_seq.append('O')
-        print('decoded data:',decoded_seq)
         return decoded_seq
     
 class Dataset(data.Dataset):

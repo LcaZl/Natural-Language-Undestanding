@@ -93,7 +93,7 @@ def train_lm(parameters):
         parameters['asp_criterion'] = nn.CrossEntropyLoss(weight = asp_weight, ignore_index = PAD_TOKEN)
         parameters['pol_criterion'] = nn.CrossEntropyLoss(weight = pol_weight, ignore_index = PAD_TOKEN)
 
-        for j in range(1):        
+        for j in range(parameters['epochs']):        
             loss = train_loop(train_loader, optimizer, model, parameters)
             losses[loss_idx].append(loss)
 
@@ -143,7 +143,7 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - aspect_loss:', aspect_loss)
 
     # Calcolo della perdita per le polarità
-    aspect_mask = (sample['y_aspects'][:, 1:-1] != 0) & (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
+    aspect_mask = (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
 
     flat_polarity_logits = polarity_logits.contiguous().view(-1, polarity_logits.shape[-1])
     flat_polarity_labels = sample['y_polarities'][:, 1:-1].contiguous().view(-1)
@@ -156,7 +156,7 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - selected_polarity_labels:', selected_polarity_labels.shape, '\n',selected_polarity_labels)
     #print(' - polarity_loss:', polarity_loss)
 
-    loss = (0.6 * aspect_loss) + (0.4 * polarity_loss)
+    loss = aspect_loss + polarity_loss
     print(' - loss:', loss)
 
     return loss
@@ -166,7 +166,7 @@ def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
     aspect_logits = aspect_logits[:, 1:-1, :] * attention_mask.unsqueeze(-1)
     polarity_logits = polarity_logits[:, 1:-1, :] * attention_mask.unsqueeze(-1)
 
-    aspect_mask = attention_mask.bool()
+    aspect_mask = (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
 
     # Estrazione delle predizioni e delle etichette per gli aspetti
     pred_ot_list = []
@@ -190,12 +190,12 @@ def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
         gold_ts_list.append(gold_ts_decoded)
 
     # Stampa dei risultati e valutazione
-    print('-gold_ot:', gold_ot_list)
-    print('-pred_ot:', pred_ot_list)
-    print('-gold_ts:', gold_ts_list)
-    print('-pred_ts:', pred_ts_list)
-    print(evaluate_ote(gold_ot_list, pred_ot_list))
-    print(evaluate_ts(gold_ts_list, pred_ts_list))
+    #print('-gold_ot:', gold_ot_list)
+    #print('-pred_ot:', pred_ot_list)
+    #print('-gold_ts:', gold_ts_list)
+    #print('-pred_ts:', pred_ts_list)
+    #print(evaluate_ote(gold_ot_list, pred_ot_list))
+    #print(evaluate_ts(gold_ts_list, pred_ts_list))
 
     return gold_ot_list, gold_ts_list, pred_ot_list, pred_ts_list
 
