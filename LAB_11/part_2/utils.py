@@ -99,14 +99,15 @@ def process_raw_data(dataset):
 
     return new_dataset
 import math
-def calculate_inverse_weights(frequencies):
+def calculate_inverse_weights(frequencies, lang):
     total_count = sum(frequencies.values())
     weights = {label: total_count / (freq + math.e) for label, freq in frequencies.items()}
     total_weight = sum(weights.values())
     normalized_weights = {label: weight / total_weight for label, weight in weights.items()}
     return normalized_weights
 
-def load_dataset():
+def load_dataset(skf):
+
     print(f'\nLoading Dataset Laptop 14...')
 
     train_raw = read_file(TRAIN_PATH)
@@ -117,7 +118,6 @@ def load_dataset():
 
     lang = Lang()
 
-    skf = StratifiedKFold(n_splits=10, random_state=42, shuffle = True)
     fold_datasets = []  # This will store the dataset splits
     stratify_labels = []
 
@@ -157,10 +157,10 @@ def load_dataset():
                 if pol in polarity_frequencies:
                     polarity_frequencies[pol] += 1
 
-        aspect_weights = calculate_inverse_weights(aspect_frequencies)
-        polarity_weights = calculate_inverse_weights(polarity_frequencies)
-        print(' - Aspect frequencies:', aspect_frequencies, ' - Weigth:', aspect_weights) 
-        print(' - Polarity frequencies:', polarity_frequencies, ' - Weigth:', polarity_weights) 
+        aspect_weights = calculate_inverse_weights(aspect_frequencies, lang)
+        polarity_weights = calculate_inverse_weights(polarity_frequencies, lang)
+        print(' - Aspects frequencies:', aspect_frequencies, '\n - Aspects weigth:', aspect_weights) 
+        print(' - Polarities frequencies:', polarity_frequencies, '\n - Polarities weigth:', polarity_weights) 
 
         train_loader = DataLoader(train_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
         val_loader = DataLoader(val_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
@@ -377,7 +377,7 @@ class Dataset(data.Dataset):
         return len(self.utt_ids)
 
     def __getitem__(self, idx):
-        if self.print_sample < PRINTABLE:
+        if self.print_sample < PRINTABLE and INFO_ENABLED:
             print('----------------------------- Sample ', idx, '-----------------------------')
             print('- Sent Ids         :', self.utt_ids[idx])
             print('- Aspects ids      :', self.asp_ids[idx])

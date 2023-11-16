@@ -52,14 +52,13 @@ def train_model(parameters):
         saved_data = torch.load(model_filename)
         print(f'Model founded. Parameters:', saved_data['parameters'])
         model, _ = init_model(parameters, saved_data['model_state'])
-        reports = [saved_data['report']]
+        reports = saved_data['report']
+        best_report = saved_data['best_report']
     else:
-        #if parameters['grid_search']:
-            #best_model, report, losses, best_params = grid_search(parameters)
-        #else:
-        best_model, report, losses = train_lm(parameters)
+        best_model, reports, losses = train_lm(parameters)
         best_params = parameters
         model = best_model[0]
+        best_report = best_model[1]
 
         # Print losses
         for fold, losses in losses.items():
@@ -67,22 +66,23 @@ def train_model(parameters):
 
         data_to_save = {
             'model_state': model.state_dict(),
-            'report': report,
+            'report': reports,
+            'best_report': best_report,
             'parameters': best_params 
         }
         torch.save(data_to_save, model_filename)
 
-    cols = ['Fold', 'F1-score', 'Accuracy']
-    training_report = pd.DataFrame(report, columns=cols).set_index('Fold')
+    cols = ['Fold', 'ot_precision', 'ot_recall', 'ot_f1', 'ts_macro_f1', 'ts_micro_p', 'ts_micro_r', 'ts_micro_f1']
+    training_report = pd.DataFrame(reports, columns=cols).set_index('Fold')
 
-    return model, training_report
+    return model, training_report, best_report
 
 def train_lm(parameters):
     losses = {}
     reports = []
     best_score = 0
 
-    pbar = tqdm(range(0,parameters['n_splits']))
+    pbar = tqdm(range(0, len(parameters['train_folds'])))
     for i in pbar:
         loss_idx = f'Fold_{i}'
         losses[loss_idx] = []
@@ -98,24 +98,26 @@ def train_lm(parameters):
             losses[loss_idx].append(loss)
 
             loss, ote_report, ts_report = eval_loop(dev_loader, model, parameters)
+            report = ote_report + ts_report
             losses[loss_idx].append(loss)
 
-            f = round(ts_report[0], 3)
-            recall = round(ts_report[2], 3)
-            prec = round(ts_report[1], 3)
-            fm = round(ts_report[3], 3)
+            ts_f = round(ts_report[0], 3)
+            ts_prec = round(ts_report[1], 3)
+            ot_f = round(ote_report[2], 3)
+            ot_prec = round(ote_report[0], 3)
             
-            pbar.set_description(f'FOLD/epoch {i+1}-{j+1} - F1:{f} - P:{prec} - R:{recall} - F1M:{fm}')
+            pbar.set_description(f'FOLD {i} - Epoch {j} - ot_F1:{ot_f} - ot_P:{ot_prec} - ts_MaF1:{ts_f} - ts_MiP:{ts_prec}')
 
-        if f > best_score:
-                best_score = f
-                best_model = model
+        loss, ote_report, ts_report = eval_loop(parameters['test_loader'], model, parameters)
+        report = ote_report + ts_report
+        losses[loss_idx].append(loss)
 
-    loss, ote_report, ts_report = eval_loop(parameters['test_loader'], best_model, parameters)
-    losses[loss_idx].append(loss)
+        reports.append([i] + list(report))
+        if ts_f > best_score:
+                best_score = ts_f
+                best_model = (model, [i] + list(report))
 
-    report = (model, [i, ote_report, ts_report])
-    return best_model, report, losses
+    return best_model, reports, losses
 
 
 def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
@@ -128,6 +130,8 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - polarity_logits:', polarity_logits.shape, '\n',polarity_logits)
     # Maschera per gli aspetti identificati
     aspect_mask = (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
+    #aspect_mask = attention_mask.bool()
+
     #print(' - aspect_mask:', aspect_mask.shape, '\n',aspect_mask)
 
     # Calcolo della perdita per gli aspetti
@@ -143,8 +147,6 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - aspect_loss:', aspect_loss)
 
     # Calcolo della perdita per le polarità
-    aspect_mask = (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
-
     flat_polarity_logits = polarity_logits.contiguous().view(-1, polarity_logits.shape[-1])
     flat_polarity_labels = sample['y_polarities'][:, 1:-1].contiguous().view(-1)
     selected_polarity_logits = flat_polarity_logits[aspect_mask.view(-1)]
@@ -157,7 +159,7 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - polarity_loss:', polarity_loss)
 
     loss = aspect_loss + polarity_loss
-    print(' - loss:', loss)
+    #print(' - loss:', loss)
 
     return loss
 
@@ -167,6 +169,7 @@ def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
     polarity_logits = polarity_logits[:, 1:-1, :] * attention_mask.unsqueeze(-1)
 
     aspect_mask = (sample['y_aspects'][:, 1:-1] != PAD_TOKEN) & attention_mask.bool()
+    #aspect_mask = attention_mask.bool()
 
     # Estrazione delle predizioni e delle etichette per gli aspetti
     pred_ot_list = []
@@ -238,10 +241,9 @@ def eval_loop(data_loader, model, parameters):
             pred_ot.extend(pred_ot_)
             pred_ts.extend(pred_ts_)
 
-            print(evaluate_ote(gold_ot_, pred_ot_))
-            print(evaluate_ts(gold_ts_, pred_ts_))
+            #print(evaluate_ote(gold_ot_, pred_ot_))
+            #print(evaluate_ts(gold_ts_, pred_ts_))
 
     ote_report, ts_report = evaluate(gold_ot, gold_ts, pred_ot, pred_ts)
-    print(ote_report, ts_report)
     return round(np.mean(losses), 3), ote_report, ts_report
     

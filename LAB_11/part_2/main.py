@@ -7,24 +7,18 @@ from functions import *
 if __name__ == "__main__":
     #Wrtite the code to load the datasets and to run your functions
     # Print the results
-    folds, test_loader, lang = load_dataset()
-    grid_search_parameters = {
-        'hidden_layer_size': [250, 300, 350],
-        'embedding_layer_size': [250, 300, 350],
-        'learning_rate': [0.002, 0.001, 0.0005, 0.0001],
-        'bidirectional': [True, False],
-    }
+
+    skf = StratifiedKFold(n_splits=10, random_state=42, shuffle = True)
+    folds, test_loader, lang = load_dataset(skf)
 
     parameters = {
             'task': 'ABSA',
             'clip':5,
-            'epochs': 5,
+            'epochs': 10,
             'n_splits':10,
             'optimizer':'Adam',
-            'dropout': 0,
+            'dropout': 0.1,
             'learning_rate': 1e-4,
-            'grid_search':False,
-            'grid_search_parameters': grid_search_parameters,
             'lang':lang,
             'output_aspects': lang.aspect_labels,
             'output_polarities':lang.polarity_labels,
@@ -33,10 +27,8 @@ if __name__ == "__main__":
             'test_loader':test_loader
         }
     
-    model, training_report = train_model(parameters)
-    print('\nOutput:\n',tabulate(training_report, headers='keys', tablefmt='grid', showindex=True))
 
-    combined_report = pd.concat([training_report.sort_index()], axis=1)
+    model, training_report, best_report = train_model(parameters)
 
-
-    print('\nComaprison:\n',tabulate(combined_report, headers='keys', tablefmt='grid', showindex=True))
+    print(f'Training report:\nBest model at fold {best_report[0]}.')
+    print(tabulate(training_report.sort_index(), headers='keys', tablefmt='grid', showindex=True))
