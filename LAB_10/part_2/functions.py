@@ -182,7 +182,7 @@ def train_loop(data, optimizer, model, parameters):
         total_loss.backward()
 
         # clip the gradient to avoid explosioning gradients
-        #torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
+        torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
         optimizer.step() # Update the weights
 
     return total_loss_array, intent_loss_array, slot_loss_array
