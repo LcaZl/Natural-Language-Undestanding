@@ -112,7 +112,7 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
         lang = Lang(categories)
         dataset = Dataset(all_sentences, args[0])
-        dataloader = DataLoader(dataset, batch_size = 64, collate_fn = collate_fn)
+        dataloader = DataLoader(dataset, batch_size = 128, collate_fn = collate_fn)
 
         return dataloader, None, lang
     
@@ -149,13 +149,13 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
         train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
-        train_loader = DataLoader(train_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
-        val_loader = DataLoader(val_dataset, batch_size = 32, shuffle = True, collate_fn = collate_fn)
+        train_loader = DataLoader(train_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
         fold_datasets.append((train_loader, val_loader))
 
     print(f' - TEST SET - Size: {len(test_sentences)}')
     test_dataset = Dataset(test_sentences, lang)
-    test_loader = DataLoader(test_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
 
     # Info
     print(' - Vocabulary size:', lang.vocab_size)
