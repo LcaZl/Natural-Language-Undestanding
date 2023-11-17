@@ -56,11 +56,12 @@ if __name__ == "__main__":
             'clip':5,
             'n_splits':FOLDS,
             'epochs':200,
-            'runs':5,
+            'runs':3,
             'output_size':1,
             'criterion': nn.BCEWithLogitsLoss(),
             'optimizer':'Adam',
-            'grid_search_parameters': grid_search_parameters
+            'grid_search_parameters': grid_search_parameters,
+            'vader_score': False
     }
 
     training_parameters = {
@@ -68,12 +69,7 @@ if __name__ == "__main__":
             **training_baseline,
 
             'task':'subjectivity_detection',
-
-            'learning_rate': 0.0005,
-            'hidden_layer_size':200,
-            'embedding_layer_size' : 300,
-            'bidirectional':True,   
-            'vader_score':False,
+            'learning_rate': 5e-5, #0.0005
             'dropout':0.1,      
 
             'vocab_size': subj_lang.vocab_size,
@@ -87,12 +83,7 @@ if __name__ == "__main__":
             **training_baseline,
 
             'task':'polarity_detection',
-
             'learning_rate': 5e-4,
-            'hidden_layer_size':300,
-            'embedding_layer_size' : 300,
-            'bidirectional':True,
-            'vader_score':True,
             'dropout':0.1,         
 
             'vocab_size': mr_lang.vocab_size,
@@ -119,18 +110,17 @@ if __name__ == "__main__":
 
     training_parameters['polarity_model_no_obj'] = {
         **training_baseline,
+        
         'task':'polarity_detection_with_filtered_dataset',
         'learning_rate': 0.00075,
-        'hidden_layer_size':836,
-        'embedding_layer_size' : 836,
-        'bidirectional':False,
         'dropout':0.1,
-        'grid_search':False,
+
         'vocab_size': mr2_lang.vocab_size,
         'train_folds':mr2_fold_dataset,
         'test_loader':mr2_test,
         'lang':mr2_lang, 
-        'vader_score': False
+        'grid_search':False,
+
     }
     
     pol2_model, pol2_training_report = train_model(training_parameters['polarity_model_no_obj'])

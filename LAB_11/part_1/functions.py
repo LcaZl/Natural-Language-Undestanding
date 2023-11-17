@@ -27,7 +27,7 @@ def create_subj_filter(dataset, model, lang, subj_lang):
         # Filtrare il train set
         for sample in tqdm(dataset):
 
-            outputs = model(sample['text'], sample['vlabels'], sample['lengths'])
+            outputs = model(sample['text'], sample['attention_masks'])#, sample['vlabels'])
             predictions = torch.round(torch.sigmoid(outputs))
             subjective_mask = predictions.view(-1) == 1
 
@@ -100,10 +100,9 @@ def init_weights(mat):
 def init_model(parameters, model_state = None):
 
     model = SUBJ_Model(
-        hidden_size=parameters['hidden_layer_size'],
         output_size=parameters['output_size'],
-        dropout=parameters['dropout'],
-        vader = parameters['vader_score']                   
+        dropout=parameters['dropout']
+        #vader = parameters['vader_score']                   
     ).to(DEVICE)
     if model_state:
         model.load_state_dict(model_state)
@@ -190,7 +189,7 @@ def train_lm(parameters):
                 loss = train_loop(train_loader, optimizer, model, parameters)
                 losses[loss_idx].append(loss)
 
-                if epoch % 5:
+                if epoch % 2:
                     _, score, report = evaluation(model, parameters, dev_loader)
                     
                     if score > S:
@@ -237,9 +236,9 @@ def train_loop(data_loader, optimizer, model, parameters):
 
         input_ids = sample['text']
         attention_mask = sample['attention_masks']
-        vader_scores = sample['vlabels']
+        #vader_scores = sample['vlabels']
 
-        output = model(input_ids, attention_mask, vader_scores)
+        output = model(input_ids, attention_mask)#, vader_scores)
 
         loss = parameters['criterion'](output.view(-1), sample['labels'].float())
         losses.append(loss.item())
@@ -260,9 +259,9 @@ def eval_loop(data_loader, model, parameters):
         for sample in data_loader:
             input_ids = sample['text']
             attention_mask = sample['attention_masks']
-            vader_scores = sample['vlabels']
+            #vader_scores = sample['vlabels']
 
-            outputs = model(input_ids, attention_mask, vader_scores)
+            outputs = model(input_ids, attention_mask)#, vader_scores)
             loss = parameters['criterion'](outputs.view(-1), sample['labels'].float())
             losses.append(loss.item())
 

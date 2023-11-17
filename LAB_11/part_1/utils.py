@@ -29,14 +29,14 @@ from tqdm import tqdm
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
-DEVICE = 'cpu'
+DEVICE = 'cuda:0'
 INFO_ENABLED = False
 MAX_VOCAB_SIZE = 10000
 
 def preprocess(dataset, label, mark_neg = True, file_id = 0):
     new_dataset = []
-    for sent in dataset:
-        text = ' '.join(sent)
+    for tokens in dataset:
+        text = ' '.join(tokens)
 
         vscore = sia.polarity_scores(text)['compound']
         if vscore <= -0.5:
@@ -48,12 +48,12 @@ def preprocess(dataset, label, mark_neg = True, file_id = 0):
         else:
             vscore = 'VPOS'  # Molto positivo
 
-        #stop_words = set(stopwords.words('english'))
+        stop_words = set(stopwords.words('english'))
         #lemmatizer = WordNetLemmatizer()
-        tokens = word_tokenize(text)
+        #tokens = word_tokenize(text)
         tokens = [word.lower() for word in tokens if word.isalpha()]
         #tokens = [lemmatizer.lemmatize(word) for word in tokens]
-        #tokens = [word for word in tokens if word not in stop_words]
+        tokens = [word for word in tokens if word not in stop_words]
 
         if mark_neg:
             tokens = mark_negation(tokens)
@@ -151,14 +151,14 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
         train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
 
-        train_loader = DataLoader(train_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
-        val_loader = DataLoader(val_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
+        train_loader = DataLoader(train_dataset, batch_size = 48, shuffle = True, collate_fn = collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size = 32, shuffle = True, collate_fn = collate_fn)
         
         # Store the datasets
         fold_datasets.append((train_loader, val_loader))
 
     test_dataset = Dataset(test_sentences, lang)
-    test_loader = DataLoader(test_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size = 48, shuffle = True, collate_fn = collate_fn)
 
     # Subjectivity dataset
     #print(' - All sentences:', all_sentences[:3])
@@ -232,9 +232,9 @@ class Dataset(data.Dataset):
         tokenized_sent = self.lang.tokenizer(' '.join(sentence))
 
         encoded_sentence = tokenized_sent['input_ids']
-        attention_mask = torch.LongTensor(tokenized_sent['attention_mask'])
+        attention_mask = torch.tensor(tokenized_sent['attention_mask'])
 
-        tensor_sentence = torch.LongTensor(encoded_sentence)
+        tensor_sentence = torch.tensor(encoded_sentence)
         tensor_vlabel = self.lang.vlabel2id[vlabel]
         tensor_label = self.lang.class2id[label]
 
@@ -251,7 +251,7 @@ class Dataset(data.Dataset):
 
 
         return {'text':tensor_sentence, 'attention_mask':attention_mask, 'vlabel': tensor_vlabel, 'label':tensor_label, 'docid': doc_id}
-    
+BERT_MAX_LEN = 512
 # Preprocessing function
 def collate_fn(batch):
 
@@ -259,7 +259,8 @@ def collate_fn(batch):
         '''
         merge from batch * sent_len to batch * max_len 
         '''
-        lengths = [len(seq) for seq in sequences]
+        lengths = [min(len(seq), BERT_MAX_LEN) for seq in sequences]
+
         for i,l in enumerate(lengths):
             if l == 0:
                 print(sequences[i])
@@ -281,14 +282,13 @@ def collate_fn(batch):
     for key in batch[0].keys():
         new_item[key] = [el[key] for el in batch]
 
-    source, lengths = merge(new_item['text'])
+    source, _ = merge(new_item['text'])
     attention_masks, _ = merge(new_item['attention_mask'])
 
     new_item['text'] = source.to(DEVICE)
-    new_item['labels'] = torch.LongTensor(new_item['label']).to(DEVICE)
-    new_item['lengths'] = torch.LongTensor(lengths).to(DEVICE)
-    new_item['vlabels'] = torch.LongTensor(new_item['vlabel']).to(DEVICE)
-    new_item['attention_masks'] = torch.LongTensor(attention_masks).to(DEVICE)
+    new_item['labels'] = torch.tensor(new_item['label']).to(DEVICE)
+    #new_item['vlabels'] = torch.tensor(new_item['vlabel']).to(DEVICE)
+    new_item['attention_masks'] = attention_masks.to(DEVICE)
     #if INFO_ENABLED:
         #print('COLLATEFN:',new_item['text'].shape, new_item['vlabels'].shape, new_item['labels'].shape, new_item['lengths'].shape)
     return new_item
