@@ -9,14 +9,6 @@ if __name__ == "__main__":
     FOLDS = 10
     skf = StratifiedKFold(n_splits=FOLDS, random_state=42, shuffle = True)
 
-    print('Loading datasets ...\n')
-
-    subj_fold_dataset, subj_test, subj_lang = load_dataset('Subjectivity', skf, test_size)
-
-    mr_fold_dataset, mr_test, mr_lang = load_dataset('Movie_reviews', skf, test_size)
-
-    print('Datasets loaded.\n')
-
     grid_search_parameters = {
         'hidden_layer_size': [200, 250, 300],
         'embedding_layer_size': [200, 250, 300],
@@ -35,8 +27,13 @@ if __name__ == "__main__":
             'grid_search_parameters': grid_search_parameters,
     }
 
-    training_parameters = {
-        'Subj_model':{
+    training_parameters = {}
+
+    # Training for subjectivity
+
+    subj_fold_dataset, subj_test, subj_lang = load_dataset('Subjectivity', skf, test_size)
+
+    training_parameters['Subj_model'] = {
             **training_baseline,
 
             'task':'subjectivity_detection',
@@ -49,8 +46,15 @@ if __name__ == "__main__":
             'lang':subj_lang,
             'grid_search':False
 
-        },
-        'polarity_model':{
+        }
+    
+    subj_model, subj_training_report = train_model(training_parameters['Subj_model'])
+    print('\nOutput:\n',tabulate(subj_training_report, headers='keys', tablefmt='grid', showindex=True))
+
+    # Training for polarity
+    mr_fold_dataset, mr_test, mr_lang = load_dataset('Movie_reviews', skf, test_size)
+
+    training_parameters['polarity_model'] = {
             **training_baseline,
 
             'task':'polarity_detection',
@@ -64,13 +68,11 @@ if __name__ == "__main__":
             'grid_search':False
 
         }
-    }
-
-    subj_model, subj_training_report = train_model(training_parameters['Subj_model'])
-    print('\nOutput:\n',tabulate(subj_training_report, headers='keys', tablefmt='grid', showindex=True))
-
+    
     pol_model, pol_training_report = train_model(training_parameters['polarity_model'])
     print('\nOutput:\n',tabulate(pol_training_report, headers='keys', tablefmt='grid', showindex=True))
+
+    # Training pipeline 
 
     mr4subj_fold_dataset, _, mr4subj_lang = load_dataset('movie_review_4subjectivity', skf, test_size, args = [subj_lang])
 
@@ -98,11 +100,10 @@ if __name__ == "__main__":
     print('\nOutput:\n',tabulate(pol2_training_report, headers='keys', tablefmt='grid', showindex=True))
 
 
-    # Rinomina le colonne per ciascun DataFrame per riflettere il modello
+    # Final output
     subj_training_report.columns = [f'Subj_{col}' for col in subj_training_report.columns]
     pol_training_report.columns = [f'Pol_{col}' for col in pol_training_report.columns]
     pol2_training_report.columns = [f'Pol_No_Obj_{col}' for col in pol2_training_report.columns]
 
-    # Unisci i DataFrame utilizzando l'indice 'Fold'
     combined_report = pd.concat([subj_training_report.sort_index(), pol_training_report.sort_index(), pol2_training_report.sort_index()], axis=1)
     print('\nComaprison:\n',tabulate(combined_report, headers='keys', tablefmt='grid', showindex=True))

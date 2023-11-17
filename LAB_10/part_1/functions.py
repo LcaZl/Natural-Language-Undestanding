@@ -18,6 +18,8 @@ from tabulate import tabulate
 from utils import *
 from model import *
 
+def init_model(parameters):
+
 def execute_experiments(experiments_parameters):
 
     cols = ['Id','Run','Accuracy','Accuracy Std','F score', 'F Std']
@@ -33,57 +35,58 @@ def execute_experiments(experiments_parameters):
         print(f'\nStart Training:')
         slot_f1s, intent_acc = [], []
 
-        for run in range(parameters['runs']):
-            print(f'- Run {run}')
-            model_filename = f"models_weight/{exp_id}_run{run}.pth"
+        print(f'- Run {run}')
+        model_filename = f"models_weight/{exp_id}_run{run}.pth"
 
-            if os.path.exists(model_filename):
-                saved_data = torch.load(model_filename)
-                
+        if os.path.exists(model_filename):
+            saved_data = torch.load(model_filename)
+            print(f'Model founded. Parameters:', saved_data['parameters'])
+
+            model = ModelIAS(hid_size = parameters['hidden_layer_size'], 
+                                emb_size = parameters['embedded_layer_size'], 
+                                out_slot = parameters['output_slots'], 
+                                out_int = parameters['output_intent'], 
+                                vocab_len = parameters['vocabulary_size'], 
+                                pad_index = PAD_TOKEN).to(DEVICE)
+            model.load_state_dict(saved_data['model_state'])
+
+            f1 = saved_data['slot_f1']
+            accuracy = saved_data['intent_acc']
+            intent_acc.append(accuracy)
+            slot_f1s.append(f1)
+            print(f' - Pre-trained model loaded.')
+
+        else:
+            if parameters['model'] == 'IAS':
                 model = ModelIAS(hid_size = parameters['hidden_layer_size'], 
                                     emb_size = parameters['embedded_layer_size'], 
                                     out_slot = parameters['output_slots'], 
                                     out_int = parameters['output_intent'], 
                                     vocab_len = parameters['vocabulary_size'], 
                                     pad_index = PAD_TOKEN).to(DEVICE)
-                model.load_state_dict(saved_data['model_state'])
+                model.apply(init_weights)
+            
+            optimizer = optim.Adam(model.parameters(), lr = parameters['learning_rate'])
+            criterion_slots = nn.CrossEntropyLoss(ignore_index = PAD_TOKEN)
+            criterion_intents = nn.CrossEntropyLoss() 
+            
+            accuracy, f1 = train_lm(model, parameters, optimizer, criterion_slots, criterion_intents)
+            intent_acc.append(accuracy)
+            slot_f1s.append(f1)
 
-                f1 = saved_data['slot_f1']
-                accuracy = saved_data['intent_acc']
-                intent_acc.append(accuracy)
-                slot_f1s.append(f1)
-                print(f' - Pre-trained model loaded.')
+            # Save model and scores
+            data_to_save = {
+                'model_state': model.state_dict(),
+                'slot_f1': f1,
+                'intent_acc': accuracy,
+                'parameters':parameters
+            }
+            torch.save(data_to_save, model_filename)
 
-            else:
-                if parameters['model'] == 'IAS':
-                    model = ModelIAS(hid_size = parameters['hidden_layer_size'], 
-                                        emb_size = parameters['embedded_layer_size'], 
-                                        out_slot = parameters['output_slots'], 
-                                        out_int = parameters['output_intent'], 
-                                        vocab_len = parameters['vocabulary_size'], 
-                                        pad_index = PAD_TOKEN).to(DEVICE)
-                    model.apply(init_weights)
-                
-                optimizer = optim.Adam(model.parameters(), lr = parameters['learning_rate'])
-                criterion_slots = nn.CrossEntropyLoss(ignore_index = PAD_TOKEN)
-                criterion_intents = nn.CrossEntropyLoss() 
-                
-                accuracy, f1 = train_lm(model, parameters, optimizer, criterion_slots, criterion_intents)
-                intent_acc.append(accuracy)
-                slot_f1s.append(f1)
-
-                # Save model and scores
-                data_to_save = {
-                    'model_state': model.state_dict(),
-                    'slot_f1': f1,
-                    'intent_acc': accuracy
-                }
-                torch.save(data_to_save, model_filename)
-
-            experiment_result = pd.DataFrame(columns=cols, 
-                                 data = [[exp_id, run, accuracy, 0, f1, 0]])
-            print(tabulate(experiment_result, headers='keys', tablefmt='grid', showindex=True))
-            scores = pd.concat([scores, experiment_result])
+        experiment_result = pd.DataFrame(columns=cols, 
+                                data = [[exp_id, run, accuracy, 0, f1, 0]])
+        print(tabulate(experiment_result, headers='keys', tablefmt='grid', showindex=True))
+        scores = pd.concat([scores, experiment_result])
 
         slot_f1s = np.asarray(slot_f1s)
         intent_acc = np.asarray(intent_acc)
@@ -100,41 +103,45 @@ def execute_experiments(experiments_parameters):
     return scores
 
 def train_lm(model, parameters, optimizer, criterion_slots, criterion_intents):
-    losses_train = []
-    losses_dev = []
-    sampled_epochs = []
+    losses = {}
     best_f1 = 0
-    for x in tqdm(range(1,parameters['epochs'])):
-        loss = train_loop(parameters['train_loader'], optimizer, criterion_slots,
-                        criterion_intents, model)
-        if x % 5 == 0:
-            sampled_epochs.append(x)
-            losses_train.append(np.asarray(loss).mean())
-            results_dev, intent_res, loss_dev = eval_loop(parameters['dev_loader'], criterion_slots,
-                                                        criterion_intents, model, parameters['lang'])
-            losses_dev.append(np.asarray(loss_dev).mean())
-            f1 = results_dev['total']['f']
+    pbar = range(parameters['runs'])
+    for run in pbar:
+        score, report = None, None
+        model, optimizer = init_model(parameters)
+        loss_idx = f'Run_{i}'
+        losses[loss_idx] = []
+        P = 3
+        S = 0
 
-            if f1 > best_f1:
-                best_f1 = f1
-                patience = 3
-            else:
-                patience -= 1
-            if patience <= 0: # Early stopping with patience
-                break # Not nice but it keeps the code clean
+        for x in tqdm(range(0,parameters['epochs'])):
 
-    results_test, intent_test, _ = eval_loop(parameters['test_loader'], criterion_slots,
+            loss = train_loop(parameters['train_loader'], optimizer, criterion_slots, criterion_intents, model)
+            losses[loss_idx].append(loss)
+
+            if x % 5 == 0:
+                results_dev, intent_dev, loss_dev = eval_loop(parameters['dev_loader'], 
+                                                            criterion_slots,
+                                                            criterion_intents, model, 
+                                                            parameters['lang'])
+                
+                losses[loss_idx].append(loss)
+                f1 = results_dev['total']['f']
+
+                if f1 > best_f1:
+                    best_f1 = f1
+                    patience = 3
+                else:
+                    patience -= 1
+
+                if patience <= 0: # Early stopping with patience
+                    break # Not nice but it keeps the code clean
+
+        results_test, intent_test, _ = eval_loop(parameters['test_loader'], criterion_slots,
                                             criterion_intents, model, parameters['lang'])
-    
 
-    plt.figure(num = 3, figsize=(8, 5)).patch.set_facecolor('white')
-    plt.title('Train and Dev Losses')
-    plt.ylabel('Loss')
-    plt.xlabel('Epochs')
-    plt.plot(sampled_epochs, losses_train, label='Train loss')
-    plt.plot(sampled_epochs, losses_dev, label='Dev loss')
-    plt.legend()
-    plt.show()
+        if
+    
     return intent_test['accuracy'], results_test['total']['f']
 
 def init_weights(mat):

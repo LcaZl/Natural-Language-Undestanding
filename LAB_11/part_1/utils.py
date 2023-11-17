@@ -1,6 +1,7 @@
 import nltk
 import torch
 import torch.utils.data as data
+import math
 
 from nltk.sentiment.util import mark_negation
 from nltk.lm.preprocessing import flatten
@@ -14,7 +15,7 @@ nltk.download('subjectivity')
 nltk.download('stopwords')
 nltk.download('punkt')
 nltk.download('movie_reviews')
-
+nltk.download('vader_lexicon')
 from nltk.corpus import subjectivity
 from nltk.corpus import movie_reviews
 from nltk.corpus import stopwords
@@ -29,7 +30,7 @@ INFO_ENABLED = False
 
 def preprocess(dataset, label, mark_neg = True, file_id = 0):
     new_dataset = []
-    for tokens in dataset:
+    for tokens in tqdm(dataset, desc = 'Preprocessing dataset'):
         text = ' '.join(tokens)
 
         vscore = sia.polarity_scores(text)['compound']
@@ -111,7 +112,7 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
         lang = Lang(categories)
         dataset = Dataset(all_sentences, args[0])
-        dataloader = DataLoader(dataset, batch_size = 16, collate_fn = collate_fn)
+        dataloader = DataLoader(dataset, batch_size = 64, collate_fn = collate_fn)
 
         return dataloader, None, lang
     
@@ -132,7 +133,11 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
     lang = Lang(categories)
 
-    train_labels = [label * int(len(tokens) / BERT_MAX_LEN) for tokens, label, _ in train_sentences]
+    train_labels = []
+    for tokens, label, _ in train_sentences:
+        num_segments = math.ceil(len(tokens) / BERT_MAX_LEN)
+        train_labels.extend([label] * num_segments)    
+
     fold_datasets = []
     
     for k, (train_indices, val_indices) in enumerate(kfold.split(train_sentences, train_labels)):
@@ -144,12 +149,13 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
         train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
-        train_loader = DataLoader(train_dataset, batch_size = 16, shuffle = True, collate_fn = collate_fn)
-        val_loader = DataLoader(val_dataset, batch_size = 8, shuffle = True, collate_fn = collate_fn)
+        train_loader = DataLoader(train_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size = 32, shuffle = True, collate_fn = collate_fn)
         fold_datasets.append((train_loader, val_loader))
 
+    print(f' - TEST SET - Size: {len(test_sentences)}')
     test_dataset = Dataset(test_sentences, lang)
-    test_loader = DataLoader(test_dataset, batch_size = 16, shuffle = True, collate_fn = collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
 
     # Info
     print(' - Vocabulary size:', lang.vocab_size)
