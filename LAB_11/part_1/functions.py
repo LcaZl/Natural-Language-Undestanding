@@ -35,7 +35,7 @@ def train_model(parameters):
         saved_data = torch.load(model_filename)
         print(f'Model founded. Parameters:', saved_data['parameters'])
         model, _ = init_model(parameters, saved_data['model_state'])
-        reports = [saved_data['report']]
+        reports = saved_data['report']
     else:
         if parameters['grid_search']: #
             best_model, reports, losses, best_params = grid_search(parameters)

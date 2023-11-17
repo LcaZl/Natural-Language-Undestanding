@@ -50,7 +50,7 @@ def preprocess(dataset, label, mark_neg = True, file_id = 0):
             tokens = mark_negation(tokens)
 
         if len(tokens) != 0:
-            new_dataset.append((tokens, vscore, label, file_id))
+            new_dataset.append((tokens, label, file_id))
         
     return new_dataset
 
@@ -111,7 +111,7 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
         lang = Lang(categories)
         dataset = Dataset(all_sentences, args[0])
-        dataloader = DataLoader(dataset, batch_size = 64, collate_fn = collate_fn)
+        dataloader = DataLoader(dataset, batch_size = 16, collate_fn = collate_fn)
 
         return dataloader, None, lang
     
@@ -132,7 +132,7 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
     lang = Lang(categories)
 
-    train_labels = [label for _, _, label, _ in train_sentences]
+    train_labels = [label * int(len(tokens) / BERT_MAX_LEN) for tokens, label, _ in train_sentences]
     fold_datasets = []
     
     for k, (train_indices, val_indices) in enumerate(kfold.split(train_sentences, train_labels)):
@@ -144,12 +144,12 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
         train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
-        train_loader = DataLoader(train_dataset, batch_size = 48, shuffle = True, collate_fn = collate_fn)
-        val_loader = DataLoader(val_dataset, batch_size = 32, shuffle = True, collate_fn = collate_fn)
+        train_loader = DataLoader(train_dataset, batch_size = 16, shuffle = True, collate_fn = collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size = 8, shuffle = True, collate_fn = collate_fn)
         fold_datasets.append((train_loader, val_loader))
 
     test_dataset = Dataset(test_sentences, lang)
-    test_loader = DataLoader(test_dataset, batch_size = 48, shuffle = True, collate_fn = collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size = 16, shuffle = True, collate_fn = collate_fn)
 
     # Info
     print(' - Vocabulary size:', lang.vocab_size)
@@ -185,27 +185,37 @@ class Lang:
 
 class Dataset(data.Dataset):
     def __init__(self, samples, lang):
-        self.samples = samples
+        self.samples = []
         self.lang = lang
         self.first = True
+
+        for sentence, label, doc_id in tqdm(samples, desc='Chuncking samples'):
+            tokenized_sent = self.lang.tokenizer(' '.join(sentence), truncation=False, padding=False)
+            encoded_sentence = tokenized_sent['input_ids']
+            attention_mask = tokenized_sent['attention_mask']
+
+            chunked_sentences = self.chunk_sequence(encoded_sentence)
+            chunked_attention_masks = self.chunk_sequence(attention_mask)
+
+            for sent, mask in zip(chunked_sentences, chunked_attention_masks):
+                self.samples.append((sent, mask, label, doc_id))
 
     def __len__(self):
         return len(self.samples)
 
+    def chunk_sequence(self, sequence):
+        return [sequence[i:i + BERT_MAX_LEN] for i in range(0, len(sequence), BERT_MAX_LEN)]
+
     def __getitem__(self, idx):
-        sentence, vlabel, label, doc_id = self.samples[idx]
-        tokenized_sent = self.lang.tokenizer(' '.join(sentence))
+        sentence, mask, label, doc_id = self.samples[idx]
 
-        encoded_sentence = tokenized_sent['input_ids']
-        attention_mask = torch.tensor(tokenized_sent['attention_mask'])
-
-        tensor_sentence = torch.tensor(encoded_sentence)
+        attention_mask = torch.tensor(mask)
+        tensor_sentence = torch.tensor(sentence)
         tensor_label = self.lang.class2id[label]
 
         if self.first and INFO_ENABLED:
             print('- Sample (Label:', label, ')')
             print('-- Sentence:', sentence)
-            print('-- Encoded :', encoded_sentence)
             print('-- Label:', label)
             print('-- Encoded:', tensor_label)
             print('--attMask:', attention_mask)
