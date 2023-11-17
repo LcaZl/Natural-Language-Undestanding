@@ -17,112 +17,13 @@ from model import *
 
 REMOVE_CLASS = 'obj'
 
-def create_subj_filter(dataset, model, lang, subj_lang):
-    model.to(DEVICE)
-    model.eval()
-    filter = []
-    
-    with torch.no_grad():
-        
-        # Filtrare il train set
-        for sample in tqdm(dataset):
-
-            outputs = model(sample['text'], sample['attention_masks'])#, sample['vlabels'])
-            predictions = torch.round(torch.sigmoid(outputs))
-            subjective_mask = predictions.view(-1) == 1
-
-            for i in range(sample['text'].size(0)):
-                if subj_lang.id2class[subjective_mask.tolist()[i]] == REMOVE_CLASS:
-
-                    decoded_text = lang.decode(sample['text'][i].tolist())[1:-1]
-                    filter.append(decoded_text)
-
-    return filter
-
-def grid_search(parameters):
-
-    print('Starting grid search for:', parameters['grid_search_parameters'].keys(), '\n')
-    grid = list(product(*parameters['grid_search_parameters'].values()))
-    def to_parameter_dict(keys, values):
-        return {key: value for key, value in zip(keys, values)}
-
-    best_score = 0
-    best_params = None
-    best_model = None
-    best_losses = None
-    best_model_reports = None
-
-    for i, params_tuple in enumerate(grid):
-        combined_parameters = {**parameters, **to_parameter_dict(parameters['grid_search_parameters'].keys(), params_tuple)}
-
-        print(f'({i+1}/{len(grid)})- Current parameters:',{key: combined_parameters[key] for key in combined_parameters.keys() if key in combined_parameters['grid_search_parameters'].keys()})
-
-        b_model, reports, losses = train_lm(combined_parameters)
-        
-        f = b_model[1][1]
-        acc = b_model[1][2]
-        score = (f + acc) / 2
-
-        print(f'- Best model performance -  Score F1: {b_model[1][1]} - Accuracy: {b_model[1][2]}\n')
-        
-        if score > best_score:
-            best_model_reports = reports
-            best_params = combined_parameters
-            best_model = b_model 
-            best_losses = losses
-            best_score = score
-
-    print('\nEnd grid search:')
-    print(f' - Best parameters: ',{key: combined_parameters[key] for key in best_params.keys() if key in best_params['grid_search_parameters'].keys()},'\n')
-
-    return best_model, best_model_reports, best_losses, best_params
-
-def init_weights(mat):
-    for m in mat.modules():
-        if type(m) in [nn.GRU, nn.LSTM, nn.RNN]:
-            for name, param in m.named_parameters():
-                if 'weight_ih' in name:
-                    for idx in range(4):
-                        mul = param.shape[0]//4
-                        torch.nn.init.xavier_uniform_(param[idx*mul:(idx+1)*mul])
-                elif 'weight_hh' in name:
-                    for idx in range(4):
-                        mul = param.shape[0]//4
-                        torch.nn.init.orthogonal_(param[idx*mul:(idx+1)*mul])
-                elif 'bias' in name:
-                    param.data.fill_(0)
-        else:
-            if type(m) in [nn.Linear]:
-                torch.nn.init.uniform_(m.weight, -0.01, 0.01)
-                if m.bias != None:
-                    m.bias.data.fill_(0.01)
-
-def init_model(parameters, model_state = None):
-
-    model = SUBJ_Model(
-        output_size=parameters['output_size'],
-        dropout=parameters['dropout']
-        #vader = parameters['vader_score']                   
-    ).to(DEVICE)
-    if model_state:
-        model.load_state_dict(model_state)
-    else:
-        model.apply(init_weights)
-
-    if parameters['optimizer'] == 'SGD':
-        optimizer = optim.SGD(model.parameters(), 
-                    lr=parameters['learning_rate'])
-    elif parameters['optimizer'] == 'Adam':
-        optimizer = optim.AdamW(model.parameters(), 
-                            lr=parameters['learning_rate'])
-
-    return model, optimizer
-
 def train_model(parameters):
 
     print(f'\nStart Training:')
     print(f'\n-------- ',parameters['task'],' --------\n')
     print('Parameters:\n')
+
+    # Print parameters
     for key, value in parameters.items():
         if not key in ['train_folds', 'test_loader']:
             print(f' - {key}: {value}')
@@ -130,24 +31,22 @@ def train_model(parameters):
 
     model_filename = f"models/{parameters['task']}_model.pth"
 
-    if os.path.exists(model_filename):
+    if os.path.exists(model_filename): # Model founded
         saved_data = torch.load(model_filename)
         print(f'Model founded. Parameters:', saved_data['parameters'])
         model, _ = init_model(parameters, saved_data['model_state'])
         reports = [saved_data['report']]
     else:
-        if parameters['grid_search']:
+        if parameters['grid_search']: #
             best_model, reports, losses, best_params = grid_search(parameters)
         else:
             best_model, reports, losses = train_lm(parameters)
             best_params = parameters
         model = best_model[0]
 
-        # Print losses
         for fold, losses in losses.items():
             print(f'Loss for {fold}:{losses}')
 
-        # Save model and scores
         if (parameters['task'] != 'polarity_detection_with_filtered_dataset'):
             data_to_save = {
                 'model_state': model.state_dict(),
@@ -161,6 +60,25 @@ def train_model(parameters):
     training_report = pd.DataFrame(reports, columns=cols).set_index('Fold')
 
     return model, training_report
+
+def init_model(parameters, model_state = None):
+
+    model = SUBJ_Model(
+        output_size=parameters['output_size'],
+        dropout=parameters['dropout']
+    ).to(DEVICE)
+
+    if model_state:
+        model.load_state_dict(model_state)
+
+    if parameters['optimizer'] == 'SGD':
+        optimizer = optim.SGD(model.parameters(), 
+                    lr=parameters['learning_rate'])
+    elif parameters['optimizer'] == 'Adam':
+        optimizer = optim.AdamW(model.parameters(), 
+                            lr=parameters['learning_rate'])
+
+    return model, optimizer
 
 def train_lm(parameters):
     cols = ['Fold','Run','F1-score', 'Accuracy']
@@ -218,15 +136,6 @@ def train_lm(parameters):
 
     return best_model, reports, losses
 
-def evaluation(model, parameters, dataset):
-
-    loss, report = eval_loop(dataset, model, parameters)
-    f = round(report['macro avg']['f1-score'], 4)
-    acc = round(report['accuracy'], 4)
-    score = round(np.mean([f, acc]), 4)
-    report = [f, acc]
-    return loss, score, report
-
 def train_loop(data_loader, optimizer, model, parameters):
     model.train()
     losses = []
@@ -236,7 +145,6 @@ def train_loop(data_loader, optimizer, model, parameters):
 
         input_ids = sample['text']
         attention_mask = sample['attention_masks']
-        #vader_scores = sample['vlabels']
 
         output = model(input_ids, attention_mask)#, vader_scores)
 
@@ -249,6 +157,15 @@ def train_loop(data_loader, optimizer, model, parameters):
 
     return round(np.mean(losses), 3)
 
+def evaluation(model, parameters, dataset):
+
+    loss, report = eval_loop(dataset, model, parameters)
+    f = round(report['macro avg']['f1-score'], 4)
+    acc = round(report['accuracy'], 4)
+    score = round(np.mean([f, acc]), 4)
+    report = [f, acc]
+    return loss, score, report
+
 def eval_loop(data_loader, model, parameters):
     model.eval()
     all_preds = []
@@ -259,7 +176,6 @@ def eval_loop(data_loader, model, parameters):
         for sample in data_loader:
             input_ids = sample['text']
             attention_mask = sample['attention_masks']
-            #vader_scores = sample['vlabels']
 
             outputs = model(input_ids, attention_mask)#, vader_scores)
             loss = parameters['criterion'](outputs.view(-1), sample['labels'].float())
@@ -275,3 +191,65 @@ def eval_loop(data_loader, model, parameters):
 
     return round(np.mean(losses), 3), report
 
+def create_subj_filter(dataset, model, lang, subj_lang):
+    model.to(DEVICE)
+    model.eval()
+    filter = []
+    
+    with torch.no_grad():
+        
+        for sample in tqdm(dataset):
+
+            outputs = model(sample['text'], sample['attention_masks'])
+            predictions = torch.round(torch.sigmoid(outputs))
+            subjective_mask = predictions.view(-1) == 0 # Id 0 means objective sentence
+
+            for i in range(sample['text'].size(0)):
+                if subj_lang.id2class[subjective_mask.tolist()[i]] == REMOVE_CLASS:
+
+                    decoded_text = lang.decode(sample['text'][i].tolist())[1:-1] # Discard CLS and SEP
+                    filter.append(decoded_text) # Append clean decoded comparable text
+
+    return filter
+
+"""
+Used once to fine tune some hyper parameters. Before changing the architecture of the model.
+"""
+def grid_search(parameters):
+
+    print('Starting grid search for:', parameters['grid_search_parameters'].keys(), '\n')
+    grid = list(product(*parameters['grid_search_parameters'].values()))
+
+    def to_parameter_dict(keys, values):
+        return {key: value for key, value in zip(keys, values)}
+
+    best_score = 0
+    best_params = None
+    best_model = None
+    best_losses = None
+    best_model_reports = None
+
+    for i, params_tuple in enumerate(grid):
+        combined_parameters = {**parameters, **to_parameter_dict(parameters['grid_search_parameters'].keys(), params_tuple)}
+
+        print(f'({i+1}/{len(grid)})- Current parameters:',{key: combined_parameters[key] for key in combined_parameters.keys() if key in combined_parameters['grid_search_parameters'].keys()})
+
+        b_model, reports, losses = train_lm(combined_parameters)
+        
+        f = b_model[1][1]
+        acc = b_model[1][2]
+        score = (f + acc) / 2
+
+        print(f'- Best model performance -  Score F1: {b_model[1][1]} - Accuracy: {b_model[1][2]}\n')
+        
+        if score > best_score:
+            best_model_reports = reports
+            best_params = combined_parameters
+            best_model = b_model 
+            best_losses = losses
+            best_score = score
+
+    print('\nEnd grid search:')
+    print(f' - Best parameters: ',{key: combined_parameters[key] for key in best_params.keys() if key in best_params['grid_search_parameters'].keys()},'\n')
+
+    return best_model, best_model_reports, best_losses, best_params

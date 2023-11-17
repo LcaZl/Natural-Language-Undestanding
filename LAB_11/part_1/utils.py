@@ -1,37 +1,31 @@
 import nltk
-from nltk.sentiment.util import mark_negation
 import torch
+import torch.utils.data as data
+
+from nltk.sentiment.util import mark_negation
+from nltk.lm.preprocessing import flatten
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-from collections import Counter
 from sklearn.model_selection import train_test_split
-from torch.nn.utils.rnn import pad_sequence
-from nltk.corpus import movie_reviews
-import torch.utils.data as data
-from sklearn.model_selection import KFold
-# Assure that we have the necessary data downloaded
+from transformers import BertTokenizer
+from tqdm import tqdm
+
 nltk.download('subjectivity')
-from nltk.corpus import subjectivity
-import numpy as np
 nltk.download('stopwords')
 nltk.download('punkt')
 nltk.download('movie_reviews')
-from nltk.tokenize import word_tokenize
+
+from nltk.corpus import subjectivity
+from nltk.corpus import movie_reviews
 from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-from nltk.sentiment.vader import SentimentIntensityAnalyzer, VaderConstants
-from nltk.lm.preprocessing import flatten
 from nltk.sentiment import SentimentIntensityAnalyzer
 sia = SentimentIntensityAnalyzer()
-from transformers import BertTokenizer
 
-from tqdm import tqdm
-# Parameters
 PAD_TOKEN = 0
-UNK_TOKEN = 1
+BERT_MAX_LEN = 512
+
 DEVICE = 'cuda:0'
 INFO_ENABLED = False
-MAX_VOCAB_SIZE = 10000
 
 def preprocess(dataset, label, mark_neg = True, file_id = 0):
     new_dataset = []
@@ -49,10 +43,7 @@ def preprocess(dataset, label, mark_neg = True, file_id = 0):
             vscore = 'VPOS'  # Molto positivo
 
         stop_words = set(stopwords.words('english'))
-        #lemmatizer = WordNetLemmatizer()
-        #tokens = word_tokenize(text)
         tokens = [word.lower() for word in tokens if word.isalpha()]
-        #tokens = [lemmatizer.lemmatize(word) for word in tokens]
         tokens = [word for word in tokens if word not in stop_words]
 
         if mark_neg:
@@ -70,14 +61,15 @@ def filter_movie_reviews(filter):
 
     filter = set([' '.join(sentence) for sentence in filter])
 
-    for category in categories:  # categories è una lista di categorie, ad es. ['neg', 'pos']
+    for category in categories: # ['neg','pos']
         for fileid in tqdm(movie_reviews.fileids(categories=category)):
-            # Unire tutte le frasi di un documento in una singola lista di token
-            processed_doc = preprocess(movie_reviews.sents(fileid), label='neg', mark_neg=True, file_id=fileid)                
-            new_doc = []
 
-            new_doc = [tokens for tokens, vscore, label, doc_file_id in processed_doc if ' '.join(tokens) not in filter]
-            # Unire le frasi rimanenti per creare un nuovo documento
+            # Document from list of list to a single list of tokens
+            processed_doc = preprocess(movie_reviews.sents(fileid), label='neg', mark_neg=True, file_id=fileid)                
+
+            new_doc = [tokens for tokens, _, _, _ in processed_doc if ' '.join(tokens) not in filter]
+            
+            # Creating new filtered document
             if new_doc:
                 new_mr[fileid] = [tok for sent in new_doc for tok in sent]
 
@@ -88,80 +80,78 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
     if dataset_name == 'Subjectivity':
 
-    # Load subjectivity dataset and preprocess texts
-        print(' - Categories:', subjectivity.categories())
+        categories = subjectivity.categories()
+        print(' - Categories:', categories)
         grp1_sentences = preprocess(subjectivity.sents(categories='subj'), label='subj') # (Lista token, label)
         grp2_sentences = preprocess(subjectivity.sents(categories='obj'), label='obj') # (Lista token, label)
-        categories = subjectivity.categories()
 
     elif dataset_name == 'Movie_reviews':
 
         mr = movie_reviews
         categories = mr.categories()
-        print(' - Categories:', mr.categories())
+        print(' - Categories:', categories)
         grp1_sentences = preprocess([list(flatten(doc)) for doc in mr.paras(categories='neg')], label = 'neg')
         grp2_sentences = preprocess([list(flatten(doc)) for doc in mr.paras(categories='pos')], label = 'pos')
 
-    elif dataset_name == 'movie_review_4subjectivity': # List of all sent from movie review to be filtered
+    # Mr is a list od doc (list of list of list). Here is transformed into list of sentences, to feed the subjectivity model.
+    # These sentences will be then filtered.
+    elif dataset_name == 'movie_review_4subjectivity':
 
         mr = movie_reviews
         categories = mr.categories()
 
+        # We only need the sentences, no other information and no distinction.
         all_sentences = []
-    
+
         for file_id in tqdm(movie_reviews.fileids(categories='neg')):
             all_sentences.extend(preprocess(movie_reviews.sents(file_id), 'neg', file_id=file_id))
         for file_id in tqdm(movie_reviews.fileids(categories='pos')):
             all_sentences.extend(preprocess(movie_reviews.sents(file_id), 'pos', file_id=file_id))
 
-        args[0].extend_classes(categories) # Lang
+
+        lang = Lang(categories)
         dataset = Dataset(all_sentences, args[0])
-        dataloader = DataLoader(dataset, batch_size = 128, collate_fn = collate_fn)
-        return dataloader, None, args[0]
+        dataloader = DataLoader(dataset, batch_size = 64, collate_fn = collate_fn)
+
+        return dataloader, None, lang
     
     elif dataset_name == 'movie_review_filtered':
 
-        mr = filter_movie_reviews(args[0])
+        mr = filter_movie_reviews(args[0]) # args[0] contains the sentences to remove (is the filter).
         categories = movie_reviews.categories()
 
+        # Create standard dataset
         grp1_sentences = preprocess([mr[fileid] for fileid in movie_reviews.fileids(categories='pos')], label = 'pos')
         grp2_sentences = preprocess([mr[fileid] for fileid in movie_reviews.fileids(categories='neg')], label = 'neg')
+
     else:
         raise Exception('Dataset name not recognized.')
     
     all_sentences = grp1_sentences + grp2_sentences
-
-    # Dividi il dataset in train e test
     train_sentences, test_sentences = train_test_split(all_sentences, test_size=test_size, random_state=42, shuffle = True)
 
-    # Build vocabulary
-    lang = Lang(train_sentences, categories)
+    lang = Lang(categories)
 
     train_labels = [label for _, _, label, _ in train_sentences]
-    fold_datasets = []  # This will store the dataset splits
+    fold_datasets = []
     
     for k, (train_indices, val_indices) in enumerate(kfold.split(train_sentences, train_labels)):
-        # Split the data into training and validation sets for the current fold
+
         train_samples = [train_sentences[i] for i in train_indices]
         val_samples = [train_sentences[i] for i in val_indices]
 
         print(f' - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
 
-        # Create Dataset instances
         train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
-
         train_loader = DataLoader(train_dataset, batch_size = 48, shuffle = True, collate_fn = collate_fn)
         val_loader = DataLoader(val_dataset, batch_size = 32, shuffle = True, collate_fn = collate_fn)
-        
-        # Store the datasets
         fold_datasets.append((train_loader, val_loader))
 
     test_dataset = Dataset(test_sentences, lang)
     test_loader = DataLoader(test_dataset, batch_size = 48, shuffle = True, collate_fn = collate_fn)
 
-    # Subjectivity dataset
-    #print(' - All sentences:', all_sentences[:3])
+    # Info
     print(' - Vocabulary size:', lang.vocab_size)
     print(' - Group ',grp1_sentences[0][1],' - First sent len:', len(grp1_sentences[0][0]), )
     print(' - Group ',grp2_sentences[0][1],' - First sent len:', len(grp2_sentences[0][0]), )
@@ -171,15 +161,13 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
     print(' - Sample:', train_dataset[0])
     print('Datasets loaded!\n')
+
     return fold_datasets, test_loader, lang
 
 class Lang:
-    def __init__(self, text, classes):
+    def __init__(self, classes):
+
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-
-        self.vlabel2id = self.mapping_seq([[vlabel for _, vlabel, _, _ in text]], special_token = False)
-        self.id2vlabel = {id: vlabel for vlabel, id in self.vlabel2id.items()}
-
         self.vocab_size = len(self.tokenizer.vocab)
 
         self.class2id = {}
@@ -187,36 +175,13 @@ class Lang:
             self.class2id[cls] = i
 
         self.id2class = {i:c for c, i in self.class2id.items()}
-        print(' - Vader label ids:',self.vlabel2id)
         print(' - Classes label ids:',self.class2id)
-
-    def extend_classes(self, cls):
-        for cl in cls:
-            self.class2id[cl] = len(self.class2id)
-
-        self.id2class = {i:c for c, i in self.class2id.items()}
 
     def encode(self, sentence):
         return self.tokenizer.encode(sentence)
 
     def decode(self, sentence_ids):
         return self.tokenizer.decode(sentence_ids)
-    
-    def mapping_seq(self, sentences, special_token = False):
-        #word_counts = Counter(word for sent in sentences for word in sent)
-        #most_common_words = word_counts.most_common(MAX_VOCAB_SIZE)
-
-        vocab = {}
-
-        if special_token:
-            vocab['[PAD]'] = PAD_TOKEN
-            vocab['[UNK]'] = UNK_TOKEN
-        for sent in sentences:
-            for word in sent: 
-                if not vocab.get(word):
-                    vocab[word] = len(vocab)
-
-        return vocab
 
 class Dataset(data.Dataset):
     def __init__(self, samples, lang):
@@ -235,7 +200,6 @@ class Dataset(data.Dataset):
         attention_mask = torch.tensor(tokenized_sent['attention_mask'])
 
         tensor_sentence = torch.tensor(encoded_sentence)
-        tensor_vlabel = self.lang.vlabel2id[vlabel]
         tensor_label = self.lang.class2id[label]
 
         if self.first and INFO_ENABLED:
@@ -244,14 +208,11 @@ class Dataset(data.Dataset):
             print('-- Encoded :', encoded_sentence)
             print('-- Label:', label)
             print('-- Encoded:', tensor_label)
-            print('-- vlabel:', vlabel)
-            print('--Encoded:', self.lang.vlabel2id[vlabel])
             print('--attMask:', attention_mask)
             self.first = False
 
 
-        return {'text':tensor_sentence, 'attention_mask':attention_mask, 'vlabel': tensor_vlabel, 'label':tensor_label, 'docid': doc_id}
-BERT_MAX_LEN = 512
+        return {'text':tensor_sentence, 'attention_mask':attention_mask, 'label':tensor_label, 'docid': doc_id}
 # Preprocessing function
 def collate_fn(batch):
 
@@ -287,9 +248,8 @@ def collate_fn(batch):
 
     new_item['text'] = source.to(DEVICE)
     new_item['labels'] = torch.tensor(new_item['label']).to(DEVICE)
-    #new_item['vlabels'] = torch.tensor(new_item['vlabel']).to(DEVICE)
     new_item['attention_masks'] = attention_masks.to(DEVICE)
     #if INFO_ENABLED:
-        #print('COLLATEFN:',new_item['text'].shape, new_item['vlabels'].shape, new_item['labels'].shape, new_item['lengths'].shape)
+        #print('COLLATEFN:',new_item['text'].shape.shape, new_item['labels'].shape, new_item['lengths'].shape) # , new_item['vlabels']
     return new_item
 

@@ -1,20 +1,12 @@
 from transformers import BertModel
 import torch.nn as nn
-import torch
 
 class SUBJ_Model(nn.Module):
     def __init__(self, output_size, dropout = 0.1):#, vader=False):
         super(SUBJ_Model, self).__init__()
 
-        #self.vader = vader
         self.bert = BertModel.from_pretrained('bert-base-uncased')
-
-        # Definire il fully connected layer
-        fc_input_size = self.bert.config.hidden_size  # Dimensione dell'output di BERT base uncased
-        #if vader:
-            #fc_input_size += 1  # Aggiunta per il vader score
-        self.fc = nn.Linear(fc_input_size, output_size)
-        # Definire un dropout layer
+        self.fc = nn.Linear(self.bert.config.hidden_size, output_size)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, input_ids, attention_mask):#, vader_scores):
@@ -22,15 +14,8 @@ class SUBJ_Model(nn.Module):
         # attention_mask => [batch size, max_seq_length]
         #print(input_ids)
         outputs = self.bert(input_ids, attention_mask=attention_mask)
-        hidden = outputs.last_hidden_state  # Estrai l'ultimo stato nascosto da BERT
+        hidden = outputs.last_hidden_state  # Last bert layer
 
-        # Applica dropout
         hidden = self.dropout(hidden)
 
-        # Utilizza la concatenazione dell'ultimo stato nascosto con le feature vader (se necessario)
-        #if self.vader:
-            #vader_scores = vader_scores.float()
-            #hidden = torch.cat((hidden, vader_scores), dim=2)
-
-        # Calcola l'output finale utilizzando il fully connected layer
-        return self.fc(hidden[:, 0, :])  # Utilizza solo l'output corrispondente al token [CLS]
+        return self.fc(hidden[:, 0, :])  # Use output of token [CLS]
