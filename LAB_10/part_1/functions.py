@@ -104,7 +104,7 @@ def execute_experiments(experiments_parameters):
 
 def train_lm(model, parameters, optimizer, criterion_slots, criterion_intents):
     losses = {}
-    best_f1 = 0
+    best_score = 0
     pbar = range(parameters['runs'])
     for run in pbar:
         score, report = None, None
@@ -114,34 +114,39 @@ def train_lm(model, parameters, optimizer, criterion_slots, criterion_intents):
         P = 3
         S = 0
 
-        for x in tqdm(range(0,parameters['epochs'])):
+        for epoch in tqdm(range(0,parameters['epochs'])):
 
             loss = train_loop(parameters['train_loader'], optimizer, criterion_slots, criterion_intents, model)
             losses[loss_idx].append(loss)
 
-            if x % 5 == 0:
+            if epoch % 5 == 0:
                 results_dev, intent_dev, loss_dev = eval_loop(parameters['dev_loader'], 
                                                             criterion_slots,
                                                             criterion_intents, model, 
                                                             parameters['lang'])
                 
                 losses[loss_idx].append(loss)
-                f1 = results_dev['total']['f']
+                score = results_dev['total']['f']
 
-                if f1 > best_f1:
-                    best_f1 = f1
+                if score > S:
+                    S = score
                     patience = 3
                 else:
                     patience -= 1
 
                 if patience <= 0: # Early stopping with patience
                     break # Not nice but it keeps the code clean
+        
+                pbar.set_description(f'Run {run} - Epoch {epoch} - L: {loss} - S:{f1} - Report:{report}')
 
         results_test, intent_test, _ = eval_loop(parameters['test_loader'], criterion_slots,
                                             criterion_intents, model, parameters['lang'])
 
-        if
-    
+        score = results_test['total']['f']
+        if score > best_score:
+            best_score = score
+            best_model = (model, results_test, intent_test)    
+            
     return intent_test['accuracy'], results_test['total']['f']
 
 def init_weights(mat):
