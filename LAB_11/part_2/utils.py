@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 from nltk.sentiment.util import mark_negation
 from transformers import BertTokenizer
 from nltk.stem import WordNetLemmatizer
+import math
 
 nltk.download('vader_lexicon')
 nltk.download('sentiwordnet')
@@ -34,7 +35,6 @@ TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
 INFO_ENABLED = False
 BERT_MAX_LEN = 512
-
 PRINTABLE = 3
 
 def read_file(file_path):
@@ -46,7 +46,6 @@ def read_file(file_path):
 
 def process_raw_data(dataset):
     new_dataset = []
-    lemmatizer = WordNetLemmatizer()
 
     for sample in dataset:
 
@@ -70,25 +69,23 @@ def process_raw_data(dataset):
                     if not is_in_aspect:
                         is_in_aspect = True
                         aspect_start_index = i
-                        aspect_tags.append('S')  # Inizio di un aspetto
+                        aspect_tags.append('S')  # In a new aspect
                     else:
-                        aspect_tags.append('S')  # Continuazione di un aspetto
+                        aspect_tags.append('S')  # Still inside an aspect
                 else:
 
                     if is_in_aspect:
-                        # Fine dell'aspetto corrente
+                        # End current aspect
                         aspect_tags[-1] = 'S'
                         pol_tags.append((aspect_start_index, i-1, pol_tag))
                         is_in_aspect = False
                     aspect_tags.append('O')
 
-            # Controlla se il sample finisce con un aspetto
+            # If sample ends with aspect
             if is_in_aspect:
                 aspect_tags[-1] = 'S'
                 pol_tags.append((aspect_start_index, len(words_tagged) - 1, pol_tag))
 
-            #text = [word.lower() for word in text if word.isalpha()]
-            #text = [lemmatizer.lemmatize(word) for word in text]
             new_dataset.append((' '.join(text), aspect_tags, pol_tags))
 
             if INFO_ENABLED:
@@ -98,13 +95,36 @@ def process_raw_data(dataset):
                 print('- Polarities:', pol_tags, '\n')    
 
     return new_dataset
-import math
-def calculate_inverse_weights(frequencies, lang):
-    total_count = sum(frequencies.values())
-    weights = {label: total_count / (freq + math.e) for label, freq in frequencies.items()}
-    total_weight = sum(weights.values())
-    normalized_weights = {label: round(weight / total_weight, 3) for label, weight in weights.items()}
-    return normalized_weights
+
+
+
+
+def init_weigth(lang, train_dataset):
+
+    def calculate_inverse_weights(frequencies):
+
+        total_count = sum(frequencies.values())
+        weights = {label: total_count / (freq + math.e) for label, freq in frequencies.items()}
+        total_weight = sum(weights.values())
+        normalized_weights = {label: round(weight / total_weight, 3) for label, weight in weights.items()}
+
+        return normalized_weights
+
+    aspect_frequencies = {id : 0 for id, asp in lang.id2aspect.items()}
+    polarity_frequencies = {id : 0 for id, asp in lang.id2pol.items()}
+    for aspect_tags, pol_tags in zip(train_dataset.asp_ids, train_dataset.pol_ids):
+        for aspect in aspect_tags:
+            if aspect in aspect_frequencies:
+                aspect_frequencies[aspect] += 1
+        for pol in pol_tags:
+            if pol in polarity_frequencies:
+                polarity_frequencies[pol] += 1
+
+
+    aspect_weights = calculate_inverse_weights(aspect_frequencies)
+    polarity_weights = calculate_inverse_weights(polarity_frequencies)
+
+    return aspect_weights, polarity_weights, aspect_frequencies, polarity_frequencies
 
 def load_dataset(skf):
 
@@ -127,37 +147,21 @@ def load_dataset(skf):
             stratify_labels.append(v)
         elif len(pol_tags) > 3:
             stratify_labels.append(4)
+
     count = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0, 6:0}
     for l in stratify_labels:
         count[l] += 1
-
-    #print(count)
 
     for k, (train_indices, val_indices) in enumerate(skf.split(train_set, stratify_labels)):
 
         train_samples = [train_set[idx] for idx in train_indices]
         val_samples = [train_set[idx] for idx in val_indices]
 
-        print(f'\n - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
-
         train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
+        aspect_weights, polarity_weights, aspect_frequencies, polarity_frequencies = init_weigth(lang, train_dataset)
 
-        # Inizializza i dizionari per il conteggio delle frequenze
-        aspect_frequencies = {id : 0 for id, asp in lang.id2aspect.items()}
-        polarity_frequencies = {id : 0 for id, asp in lang.id2pol.items()}
-
-        # Aggiorna il conteggio per ogni campione nel dataset
-        for aspect_tags, pol_tags in zip(train_dataset.asp_ids, train_dataset.pol_ids):
-            for aspect in aspect_tags:
-                if aspect in aspect_frequencies:
-                    aspect_frequencies[aspect] += 1
-            for pol in pol_tags:
-                if pol in polarity_frequencies:
-                    polarity_frequencies[pol] += 1
-
-        aspect_weights = calculate_inverse_weights(aspect_frequencies, lang)
-        polarity_weights = calculate_inverse_weights(polarity_frequencies, lang)
+        print(f'\n - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
         print(' - Aspects frequencies:', aspect_frequencies, '\n - Aspects weigth:', aspect_weights) 
         print(' - Polarities frequencies:', polarity_frequencies, '\n - Polarities weigth:', polarity_weights) 
 
@@ -165,7 +169,6 @@ def load_dataset(skf):
         val_loader = DataLoader(val_dataset, batch_size = 32, shuffle = True, collate_fn = collate_fn)
         
         fold_datasets.append((train_loader, val_loader, list(aspect_weights.values()), list(polarity_weights.values())))
-        #print(aspect_weights_tensor, polarity_weights_tensor) 
 
     test_dataset = Dataset(test_set, lang)
     test_loader = DataLoader(test_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
@@ -285,7 +288,6 @@ class Dataset(data.Dataset):
                 print('- Token type ids          :', tokenized_entry['token_type_ids'])
                 print('- Attention mask          :', tokenized_entry['attention_mask'])
 
-
             utt_ids.append(input_ids)
             asp_ids.append(aligned_aspect)
             pol_ids.append(aligned_polarity)
@@ -294,7 +296,8 @@ class Dataset(data.Dataset):
             attention_masks.append(tokenized_entry['attention_mask'])
             token_types.append(tokenized_entry['token_type_ids'])
 
-            # Verify sample
+            # Verify sample structure
+
             assert len(input_ids) == len(aligned_aspect) == len(tokenized_entry['attention_mask']) == len(tokenized_entry['token_type_ids']) == len(aligned_polarity)
             assert input_ids[0] == self.lang.cls_token_id and input_ids[-1] == self.lang.sep_token_id
             for pol in asp_pol_index:
@@ -310,8 +313,9 @@ class Dataset(data.Dataset):
         return utt_ids, asp_ids, pol_ids, asp_pol_ids, asp_pol_indexes, attention_masks, token_types
     
     def align_tags(self, aspect_tags, pol_tags, words, input_ids):
-        
-        aligned_aspect = ['O'] * len(input_ids)  # Default 'O' for all tokens
+        # Align aspects and polarities to the tokenized sentence
+
+        aligned_aspect = ['O'] * len(input_ids)  # Default 'O' for all tokens (inputids has cls and sep)
         asp_pol_indexes = []
 
         current_aspect = 'O'
@@ -319,6 +323,7 @@ class Dataset(data.Dataset):
         token_idx = 1  # Start from 1 to skip [CLS] token
         pol_idx = 0
 
+        # Generating aspect tuple for each sentence as Tuple(start_position, end_position, sentiment)
         for word, aspect in zip(words, aspect_tags):
             sub_tokens = self.lang.tokenizer.tokenize(word)
             for _ in sub_tokens:
@@ -330,13 +335,14 @@ class Dataset(data.Dataset):
                             aspect_start = token_idx
                             aspect_sent = pol_tags[pol_idx][2]
                             pol_idx += 1                            
-                        current_aspect = aspect
+                        current_aspect = aspect # Continuing
                     elif current_aspect != 'O':  # End of the current aspect
                         end_idx = token_idx - 1 if aspect_start != token_idx - 1 else aspect_start
                         asp_pol_indexes.append((aspect_start, end_idx, aspect_sent))
                         current_aspect = 'O'
                     token_idx += 1
 
+        # Here i have all the aspects labels equal to S, transform tu use B I E S O notation.
         in_aspect = False
         for idx, asp in enumerate(aligned_aspect):
                 if asp == 'S':
@@ -357,6 +363,7 @@ class Dataset(data.Dataset):
             print('- Aligned aspecs          :', aligned_aspect)
             print('- Decoded al. en. Aspects :', self.lang.decode_aspects(aligned_aspect))
 
+        # Align polarities using the Tuples adn generate labels for the evals script (es. S-POS, B-NEG, I-NEU, E-POS, ...)
         aligned_asp_pol = self.lang.decode_aspects(aligned_aspect)
         aligned_polarity = [self.lang.pol2id['O']] * len(input_ids)
 

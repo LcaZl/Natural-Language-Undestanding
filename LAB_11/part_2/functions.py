@@ -41,6 +41,7 @@ def train_model(parameters):
     print(f'\nStart Training:')
     print(f'\n-------- ',parameters['task'],' --------\n')
     print('Parameters:\n')
+
     for key, value in parameters.items():
         if not key in ['train_folds', 'test_loader']:
             print(f' - {key}: {value}')
@@ -60,7 +61,6 @@ def train_model(parameters):
         model = best_model[0]
         best_report = best_model[1]
 
-        # Print losses
         for fold, losses in losses.items():
             print(f'Loss for {fold}:{losses}')
 
@@ -154,12 +154,11 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - attention_mask:', attention_mask.shape, '\n',attention_mask)
     #print(' - aspect_logits:', aspect_logits.shape, '\n',aspect_logits)
     #print(' - polarity_logits:', polarity_logits.shape, '\n',polarity_logits)
-    # Maschera per gli aspetti identificati
     aspect_mask = attention_mask.bool()
 
     #print(' - aspect_mask:', aspect_mask.shape, '\n',aspect_mask)
 
-    # Calcolo della perdita per gli aspetti
+    # Aspects loss
     flat_aspect_logits = aspect_logits.contiguous().view(-1, aspect_logits.shape[-1])
     flat_aspect_labels = sample['y_aspects'][:, 1:-1].contiguous().view(-1)
     selected_aspect_logits = flat_aspect_logits[aspect_mask.view(-1)]
@@ -171,7 +170,7 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - selected_aspect_labels:', selected_aspect_labels.shape, '\n',selected_aspect_labels)
     #print(' - aspect_loss:', aspect_loss)
 
-    # Calcolo della perdita per le polarità
+    # Polarity loss
     aspect_mask = attention_mask.bool()
     
     flat_polarity_logits = polarity_logits.contiguous().view(-1, polarity_logits.shape[-1])
@@ -191,25 +190,30 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     return loss
 
 def extract_ote_ts(aspect_logits, polarity_logits, sample, parameters):
+
     attention_mask = sample['attention_mask'][:, 1:-1]
     aspect_logits = aspect_logits[:, 1:-1, :]
     polarity_logits = polarity_logits[:, 1:-1, :]
     aspect_mask = attention_mask.bool()
 
-    # Estrazione delle predizioni e delle etichette per gli aspetti
     pred_ot_list = []
     gold_ot_list = []
+
     for i in range(aspect_logits.size(0)):
+
         pred_ot = torch.argmax(aspect_logits[i][aspect_mask[i]], dim=-1)
         gold_ot = sample['y_aspects'][i, 1:-1][aspect_mask[i]]
         pred_ot_list.append(parameters['lang'].decode_aspects(pred_ot.tolist()))
         gold_ot_list.append(parameters['lang'].decode_aspects(gold_ot.tolist()))
 
-    # Estrazione delle predizioni e delle etichette per le polarità
+    # Polarity labels and predictions
+
     aspect_mask = attention_mask.bool()
     pred_ts_list = []
     gold_ts_list = []
+
     for i in range(polarity_logits.size(0)):
+
         selected_polarity_logits = torch.argmax(polarity_logits[i][aspect_mask[i]], dim=-1)
         gold_ts = sample['y_asppol'][i, 1:-1][aspect_mask[i]]
         pols = parameters['lang'].decode_polarities(selected_polarity_logits.tolist())
@@ -266,9 +270,6 @@ def eval_loop(data_loader, model, parameters):
             gold_ts.extend(gold_ts_)
             pred_ot.extend(pred_ot_)
             pred_ts.extend(pred_ts_)
-
-            #print(evaluate_ote(gold_ot_, pred_ot_))
-            #print(evaluate_ts(gold_ts_, pred_ts_))
 
     ote_report, ts_report = evaluate(gold_ot, gold_ts, pred_ot, pred_ts)
     return round(np.mean(losses), 3), ote_report, ts_report

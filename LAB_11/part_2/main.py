@@ -1,12 +1,6 @@
-# This file is used to run your functions and print the results
-# Please write your fuctions or classes in the functions.py
-
-# Import everything from functions.py file
 from functions import *
     
 if __name__ == "__main__":
-    #Wrtite the code to load the datasets and to run your functions
-    # Print the results
 
     skf = StratifiedKFold(n_splits=5, random_state=42, shuffle = True)
     folds, test_loader, lang = load_dataset(skf)
