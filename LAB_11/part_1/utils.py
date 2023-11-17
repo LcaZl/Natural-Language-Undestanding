@@ -23,11 +23,13 @@ from nltk.sentiment.vader import SentimentIntensityAnalyzer, VaderConstants
 from nltk.lm.preprocessing import flatten
 from nltk.sentiment import SentimentIntensityAnalyzer
 sia = SentimentIntensityAnalyzer()
+from transformers import BertTokenizer
+
 from tqdm import tqdm
 # Parameters
 PAD_TOKEN = 0
 UNK_TOKEN = 1
-DEVICE = 'cuda:0'
+DEVICE = 'cpu'
 INFO_ENABLED = False
 MAX_VOCAB_SIZE = 10000
 
@@ -173,13 +175,12 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
 class Lang:
     def __init__(self, text, classes):
-        self.word2id = self.mapping_seq([el for el, _, _, _ in text], special_token = True)
-        self.id2word = {id: word for word, id in self.word2id.items()}
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
         self.vlabel2id = self.mapping_seq([[vlabel for _, vlabel, _, _ in text]], special_token = False)
         self.id2vlabel = {id: vlabel for vlabel, id in self.vlabel2id.items()}
 
-        self.vocab_size = len(self.word2id)
+        self.vocab_size = len(self.tokenizer.vocab)
 
         self.class2id = {}
         for i, cls in enumerate(classes):
@@ -196,20 +197,20 @@ class Lang:
         self.id2class = {i:c for c, i in self.class2id.items()}
 
     def encode(self, sentence):
-        return [self.word2id.get(word, UNK_TOKEN) for word in sentence]
+        return self.tokenizer.encode(sentence)
 
     def decode(self, sentence_ids):
-        return [self.id2word[id] for id in sentence_ids]
+        return self.tokenizer.decode(sentence_ids)
     
     def mapping_seq(self, sentences, special_token = False):
         #word_counts = Counter(word for sent in sentences for word in sent)
         #most_common_words = word_counts.most_common(MAX_VOCAB_SIZE)
 
         vocab = {}
-        vocab['<PAD>'] = PAD_TOKEN
 
         if special_token:
-            vocab['<UNK>'] = UNK_TOKEN
+            vocab['[PAD]'] = PAD_TOKEN
+            vocab['[UNK]'] = UNK_TOKEN
         for sent in sentences:
             for word in sent: 
                 if not vocab.get(word):
@@ -228,7 +229,10 @@ class Dataset(data.Dataset):
 
     def __getitem__(self, idx):
         sentence, vlabel, label, doc_id = self.samples[idx]
-        encoded_sentence = self.lang.encode(sentence)
+        tokenized_sent = self.lang.tokenizer(' '.join(sentence))
+
+        encoded_sentence = tokenized_sent['input_ids']
+        attention_mask = torch.LongTensor(tokenized_sent['attention_mask'])
 
         tensor_sentence = torch.LongTensor(encoded_sentence)
         tensor_vlabel = self.lang.vlabel2id[vlabel]
@@ -242,10 +246,11 @@ class Dataset(data.Dataset):
             print('-- Encoded:', tensor_label)
             print('-- vlabel:', vlabel)
             print('--Encoded:', self.lang.vlabel2id[vlabel])
+            print('--attMask:', attention_mask)
             self.first = False
 
 
-        return {'text':tensor_sentence, 'vlabel': tensor_vlabel, 'label':tensor_label, 'docid': doc_id}
+        return {'text':tensor_sentence, 'attention_mask':attention_mask, 'vlabel': tensor_vlabel, 'label':tensor_label, 'docid': doc_id}
     
 # Preprocessing function
 def collate_fn(batch):
@@ -277,12 +282,13 @@ def collate_fn(batch):
         new_item[key] = [el[key] for el in batch]
 
     source, lengths = merge(new_item['text'])
+    attention_masks, _ = merge(new_item['attention_mask'])
 
     new_item['text'] = source.to(DEVICE)
     new_item['labels'] = torch.LongTensor(new_item['label']).to(DEVICE)
     new_item['lengths'] = torch.LongTensor(lengths).to(DEVICE)
     new_item['vlabels'] = torch.LongTensor(new_item['vlabel']).to(DEVICE)
-
+    new_item['attention_masks'] = torch.LongTensor(attention_masks).to(DEVICE)
     #if INFO_ENABLED:
         #print('COLLATEFN:',new_item['text'].shape, new_item['vlabels'].shape, new_item['labels'].shape, new_item['lengths'].shape)
     return new_item

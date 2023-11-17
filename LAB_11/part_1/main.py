@@ -73,7 +73,7 @@ if __name__ == "__main__":
             'hidden_layer_size':200,
             'embedding_layer_size' : 300,
             'bidirectional':True,   
-            'vader_score':True,
+            'vader_score':False,
             'dropout':0.1,      
 
             'vocab_size': subj_lang.vocab_size,

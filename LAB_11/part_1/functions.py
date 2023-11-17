@@ -34,7 +34,7 @@ def create_subj_filter(dataset, model, lang, subj_lang):
             for i in range(sample['text'].size(0)):
                 if subj_lang.id2class[subjective_mask.tolist()[i]] == REMOVE_CLASS:
 
-                    decoded_text = lang.decode(sample['text'][i].tolist())[:sample['lengths'][i].item()]
+                    decoded_text = lang.decode(sample['text'][i].tolist())[1:-1]
                     filter.append(decoded_text)
 
     return filter
@@ -101,11 +101,8 @@ def init_model(parameters, model_state = None):
 
     model = SUBJ_Model(
         hidden_size=parameters['hidden_layer_size'],
-        embedding_size=parameters['embedding_layer_size'],
         output_size=parameters['output_size'],
-        vocab_size=parameters['vocab_size'],
         dropout=parameters['dropout'],
-        bidirectional=parameters['bidirectional'], 
         vader = parameters['vader_score']                   
     ).to(DEVICE)
     if model_state:
@@ -238,18 +235,20 @@ def train_loop(data_loader, optimizer, model, parameters):
     for sample in data_loader:
         optimizer.zero_grad()
 
-        output = model(sample['text'], sample['vlabels'], sample['lengths'])
-        output = output.squeeze()
+        input_ids = sample['text']
+        attention_mask = sample['attention_masks']
+        vader_scores = sample['vlabels']
 
-        loss = parameters['criterion'](output, sample['labels'].float())
+        output = model(input_ids, attention_mask, vader_scores)
+
+        loss = parameters['criterion'](output.view(-1), sample['labels'].float())
         losses.append(loss.item())
 
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
         optimizer.step()
 
-    return round(np.mean(losses),3)
-
+    return round(np.mean(losses), 3)
 
 def eval_loop(data_loader, model, parameters):
     model.eval()
@@ -258,29 +257,21 @@ def eval_loop(data_loader, model, parameters):
     losses = []
 
     with torch.no_grad():
-        first_eval = True
         for sample in data_loader:
-            outputs = model(sample['text'], sample['vlabels'], sample['lengths'])    
-            outputs = outputs.squeeze()  # Riduce la dimensione dell'output a [batch_size]
+            input_ids = sample['text']
+            attention_mask = sample['attention_masks']
+            vader_scores = sample['vlabels']
 
-            loss = parameters['criterion'](outputs, sample['labels'].float())
-
+            outputs = model(input_ids, attention_mask, vader_scores)
+            loss = parameters['criterion'](outputs.view(-1), sample['labels'].float())
             losses.append(loss.item())
-            
-            #print('Outputs:',outputs)
+
             probs = torch.sigmoid(outputs)
-            #print(probs)
-            preds = (probs > 0.5).long() 
-            if first_eval:
-                #print('preds', preds)
-                #print('labels', sample['labels'])
-                #print('preds', preds.cpu())
-                #print('labels', sample['labels'].cpu())
-                #print('preds', preds.cpu().numpy())
-                #print('labels', sample['labels'].cpu().numpy())
-                first_eval = False
+            preds = (probs > 0.5).long()
+
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(sample['labels'].cpu().numpy())
+
     report = classification_report(all_labels, all_preds, zero_division=False, output_dict=True)
 
     return round(np.mean(losses), 3), report
