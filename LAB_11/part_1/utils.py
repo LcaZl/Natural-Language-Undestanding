@@ -24,15 +24,20 @@ sia = SentimentIntensityAnalyzer()
 
 PAD_TOKEN = 0
 BERT_MAX_LEN = 512
-
+TOKENIZER = BertTokenizer.from_pretrained('bert-base-uncased')
 DEVICE = 'cuda:0'
 INFO_ENABLED = False
 
-def preprocess(dataset, label, mark_neg = True, file_id = 0):
+def preprocess(dataset, label, mark_neg = True):
     new_dataset = []
+
+    def chunk_sequence(sequence):
+        return [sequence[i:i + BERT_MAX_LEN] for i in range(0, len(sequence), BERT_MAX_LEN)]
+
     for tokens in tqdm(dataset, desc = 'Preprocessing dataset'):
         text = ' '.join(tokens)
 
+        """
         vscore = sia.polarity_scores(text)['compound']
         if vscore <= -0.5:
             vscore = 'VNEG'  # Molto negativo
@@ -42,7 +47,8 @@ def preprocess(dataset, label, mark_neg = True, file_id = 0):
             vscore = 'POS'  # Positivo
         else:
             vscore = 'VPOS'  # Molto positivo
-
+        """
+        
         stop_words = set(stopwords.words('english'))
         tokens = [word.lower() for word in tokens if word.isalpha()]
         tokens = [word for word in tokens if word not in stop_words]
@@ -51,7 +57,18 @@ def preprocess(dataset, label, mark_neg = True, file_id = 0):
             tokens = mark_negation(tokens)
 
         if len(tokens) != 0:
-            new_dataset.append((tokens, label, file_id))
+            tokenized_sent = TOKENIZER(' '.join(tokens), truncation=False, padding=False)
+            encoded_sentence = tokenized_sent['input_ids']
+            attention_mask = tokenized_sent['attention_mask']
+
+            if len(encoded_sentence) > BERT_MAX_LEN:
+                chunked_sentences = chunk_sequence(encoded_sentence)
+                chunked_attention_masks = chunk_sequence(attention_mask)
+
+                for sent, mask in zip(chunked_sentences, chunked_attention_masks):
+                    new_dataset.append((sent, mask, label))
+            else:
+                new_dataset.append((encoded_sentence, attention_mask, label))
         
     return new_dataset
 
@@ -63,20 +80,17 @@ def filter_movie_reviews(filter):
     filter = set([' '.join(sentence) for sentence in filter])
 
     for category in categories: # ['neg','pos']
-        for fileid in tqdm(movie_reviews.fileids(categories=category)):
 
-            # Document from list of list to a single list of tokens
-            processed_doc = preprocess(movie_reviews.sents(fileid), label='neg', mark_neg=True, file_id=fileid)                
-
-            new_doc = [tokens for tokens, _, _, _ in processed_doc if ' '.join(tokens) not in filter]
+            processed_set = preprocess(movie_reviews.sents(categories = category), label=category, mark_neg=True)                
+            new_mr[category] = []
+            for sample in processed_set:
+                sent = sample[0]
+                if sent not in filter:
+                    new_mr[category].append(sample)
             
-            # Creating new filtered document
-            if new_doc:
-                new_mr[fileid] = [tok for sent in new_doc for tok in sent]
-
     return new_mr
     
-def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
+def load_dataset(dataset_name, kfold, test_size = 0.1, args = [], tr_batch = 64, vl_batch = 32):
     print(f'\nLoading Dataset {dataset_name}...')
 
     if dataset_name == 'Subjectivity':
@@ -91,8 +105,8 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
         mr = movie_reviews
         categories = mr.categories()
         print(' - Categories:', categories)
-        grp1_sentences = preprocess([list(flatten(doc)) for doc in mr.paras(categories='neg')], label = 'neg')
-        grp2_sentences = preprocess([list(flatten(doc)) for doc in mr.paras(categories='pos')], label = 'pos')
+        grp1_sentences = preprocess([sent for sent in mr.sents(categories='neg')], label = 'neg')
+        grp2_sentences = preprocess([sent for sent in mr.sents(categories='pos')], label = 'pos')
 
     # Mr is a list od doc (list of list of list). Here is transformed into list of sentences, to feed the subjectivity model.
     # These sentences will be then filtered.
@@ -109,21 +123,20 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
         for file_id in tqdm(movie_reviews.fileids(categories='pos')):
             all_sentences.extend(preprocess(movie_reviews.sents(file_id), 'pos', file_id=file_id))
 
-
         lang = Lang(categories)
         dataset = Dataset(all_sentences, args[0])
-        dataloader = DataLoader(dataset, batch_size = 128, collate_fn = collate_fn)
+        dataloader = DataLoader(dataset, batch_size = tr_batch, collate_fn = collate_fn)
 
         return dataloader, None, lang
     
     elif dataset_name == 'movie_review_filtered':
 
-        mr = filter_movie_reviews(args[0]) # args[0] contains the sentences to remove (is the filter).
+        mr_filtered = filter_movie_reviews(args[0]) # args[0] contains the sentences to remove (is the filter).
         categories = movie_reviews.categories()
 
         # Create standard dataset
-        grp1_sentences = preprocess([mr[fileid] for fileid in movie_reviews.fileids(categories='pos')], label = 'pos')
-        grp2_sentences = preprocess([mr[fileid] for fileid in movie_reviews.fileids(categories='neg')], label = 'neg')
+        grp1_sentences = mr_filtered['pos']
+        grp2_sentences = mr_filtered['neg']
 
     else:
         raise Exception('Dataset name not recognized.')
@@ -133,11 +146,7 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
     lang = Lang(categories)
 
-    train_labels = []
-    for tokens, label, _ in train_sentences:
-        num_segments = math.ceil(len(tokens) / BERT_MAX_LEN)
-        train_labels.extend([label] * num_segments)    
-
+    train_labels = [label for _, _, label in train_sentences]
     fold_datasets = []
     
     for k, (train_indices, val_indices) in enumerate(kfold.split(train_sentences, train_labels)):
@@ -149,18 +158,18 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = []):
 
         train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
-        train_loader = DataLoader(train_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
-        val_loader = DataLoader(val_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
+        train_loader = DataLoader(train_dataset, batch_size = tr_batch, shuffle = True, collate_fn = collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size = vl_batch, shuffle = True, collate_fn = collate_fn)
         fold_datasets.append((train_loader, val_loader))
 
     print(f' - TEST SET - Size: {len(test_sentences)}')
     test_dataset = Dataset(test_sentences, lang)
-    test_loader = DataLoader(test_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size = tr_batch, shuffle = True, collate_fn = collate_fn)
 
     # Info
     print(' - Vocabulary size:', lang.vocab_size)
-    print(' - Group ',grp1_sentences[0][1],' - First sent len:', len(grp1_sentences[0][0]), )
-    print(' - Group ',grp2_sentences[0][1],' - First sent len:', len(grp2_sentences[0][0]), )
+    print(' - Group ',grp1_sentences[0][2],' - First sent len:', len(grp1_sentences[0][0]), )
+    print(' - Group ',grp2_sentences[0][2],' - First sent len:', len(grp2_sentences[0][0]), )
     print(f'{dataset_name} folds (', len(fold_datasets), '):')
     for k, fold in enumerate(fold_datasets):
         print('- Fold',k,' dim -> Train:',len(fold[0]), 'Dev:', len(fold[1]))
@@ -191,26 +200,12 @@ class Lang:
 
 class Dataset(data.Dataset):
     def __init__(self, samples, lang):
-        self.samples = []
+        self.samples = samples
         self.lang = lang
         self.first = True
 
-        for sentence, label, doc_id in tqdm(samples, desc='Chuncking samples'):
-            tokenized_sent = self.lang.tokenizer(' '.join(sentence), truncation=False, padding=False)
-            encoded_sentence = tokenized_sent['input_ids']
-            attention_mask = tokenized_sent['attention_mask']
-
-            chunked_sentences = self.chunk_sequence(encoded_sentence)
-            chunked_attention_masks = self.chunk_sequence(attention_mask)
-
-            for sent, mask in zip(chunked_sentences, chunked_attention_masks):
-                self.samples.append((sent, mask, label, doc_id))
-
     def __len__(self):
         return len(self.samples)
-
-    def chunk_sequence(self, sequence):
-        return [sequence[i:i + BERT_MAX_LEN] for i in range(0, len(sequence), BERT_MAX_LEN)]
 
     def __getitem__(self, idx):
         sentence, mask, label, doc_id = self.samples[idx]

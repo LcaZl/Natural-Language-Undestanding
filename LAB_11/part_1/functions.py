@@ -207,8 +207,7 @@ def create_subj_filter(dataset, model, lang, subj_lang):
             for i in range(sample['text'].size(0)):
                 if subj_lang.id2class[subjective_mask.tolist()[i]] == REMOVE_CLASS:
 
-                    decoded_text = lang.decode(sample['text'][i].tolist())[1:-1] # Discard CLS and SEP
-                    filter.append(decoded_text) # Append clean decoded comparable text
+                    filter.append(sample['text'][i].tolist()[1:-1]) # Append clean decoded comparable text
 
     return filter
 
