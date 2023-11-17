@@ -208,23 +208,23 @@ class Dataset(data.Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        sentence, mask, label, doc_id = self.samples[idx]
+        sentence, mask, label = self.samples[idx]
 
         attention_mask = torch.tensor(mask)
         tensor_sentence = torch.tensor(sentence)
-        tensor_label = self.lang.class2id[label]
+        encoded_label = self.lang.class2id[label]
 
         if self.first and INFO_ENABLED:
             print('- Sample (Label:', label, ')')
             print('-- Sentence:', sentence)
             print('-- Label:', label)
-            print('-- Encoded:', tensor_label)
+            print('-- Encoded:', encoded_label)
             print('--attMask:', attention_mask)
             self.first = False
 
 
-        return {'text':tensor_sentence, 'attention_mask':attention_mask, 'label':tensor_label, 'docid': doc_id}
-# Preprocessing function
+        return {'text':tensor_sentence, 'attention_mask':attention_mask, 'label':encoded_label}
+    
 def collate_fn(batch):
 
     def merge(sequences):

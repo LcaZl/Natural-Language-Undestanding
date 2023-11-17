@@ -52,14 +52,14 @@ if __name__ == "__main__":
     print('\nOutput:\n',tabulate(subj_training_report, headers='keys', tablefmt='grid', showindex=True))
 
     # Training for polarity
-    mr_fold_dataset, mr_test, mr_lang = load_dataset('Movie_reviews', skf, test_size, tr_batch = 64, vl_batch = 32)
+    mr_fold_dataset, mr_test, mr_lang = load_dataset('Movie_reviews', skf, test_size, tr_batch = 80, vl_batch = 48)
 
     training_parameters['polarity_model'] = {
             **training_baseline,
 
             'task':'polarity_detection',
-            'learning_rate': 1e-5,
-            'dropout':0.0,         
+            'learning_rate': 1e-4,
+            'dropout':0.05,         
 
             'vocab_size': mr_lang.vocab_size,
             'train_folds':mr_fold_dataset,
