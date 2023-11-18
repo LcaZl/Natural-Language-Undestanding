@@ -156,14 +156,14 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = [], tr_batch = 64,
 
         print(f' - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
 
-        train_dataset = Dataset(train_samples, lang)
+        train_dataset = Dataset(val_samples, lang)
         val_dataset = Dataset(val_samples, lang)
         train_loader = DataLoader(train_dataset, batch_size = tr_batch, shuffle = True, collate_fn = collate_fn)
         val_loader = DataLoader(val_dataset, batch_size = vl_batch, shuffle = True, collate_fn = collate_fn)
         fold_datasets.append((train_loader, val_loader))
 
     print(f' - TEST SET - Size: {len(test_sentences)}')
-    test_dataset = Dataset(test_sentences, lang)
+    test_dataset = Dataset(val_samples, lang)
     test_loader = DataLoader(test_dataset, batch_size = tr_batch, shuffle = True, collate_fn = collate_fn)
 
     # Info

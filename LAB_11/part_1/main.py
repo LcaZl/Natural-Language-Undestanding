@@ -6,7 +6,7 @@ if __name__ == "__main__":
     # Print the results
 
     test_size = 0.1 # Train, dev, test
-    FOLDS = 10
+    FOLDS = 2
     skf = StratifiedKFold(n_splits=FOLDS, random_state=42, shuffle = True)
 
     grid_search_parameters = {
@@ -20,7 +20,7 @@ if __name__ == "__main__":
             'clip':5,
             'n_splits':FOLDS,
             'epochs':200,
-            'runs':3,
+            'runs':1,
             'output_size':1,
             'criterion': nn.BCEWithLogitsLoss(),
             'optimizer':'Adam',
