@@ -19,16 +19,15 @@ from model import *
 
 
 def init_model(parameters, model_state = None):
-    optimizer = None
+
     model = jointBERT(out_slot=parameters['num_slot_labels'],
                     out_int=parameters['num_intent_labels'],
                     dropout_rate=parameters['dropout_probabilities']).to(DEVICE)
 
     if model_state:
         model.load_state_dict(model_state)
-    else:
-        model.apply(init_weights)
-        optimizer = optim.Adam(model.parameters(), lr = parameters['learning_rate'])
+    
+    optimizer = optim.Adam(model.parameters(), lr = parameters['learning_rate'])
 
     return model, optimizer
 
@@ -42,7 +41,7 @@ def execute_experiment(exp_id, parameters):
 
     print(f'\nStart Training:')
 
-    model_filename = f"models_weight/JB_{exp_id}.pth"
+    model_filename = f"models/JointBert_{exp_id}.pth"
 
     if os.path.exists(model_filename):
         saved_data = torch.load(model_filename)
@@ -73,11 +72,11 @@ def execute_experiment(exp_id, parameters):
 
 def train_lm(parameters):
     train_losses = {}
-    dev_losses = []
+    dev_losses = {}
     best_score = 0
     reports = []
 
-    pbar = tqdm(parameters['runs'])
+    pbar = tqdm(range(0,parameters['runs']))
     for r in pbar:
 
         score, report = None, None
@@ -89,14 +88,14 @@ def train_lm(parameters):
         P = 3
         S = 0
 
-        for epoch in tqdm(range(0,parameters['epochs'])):
+        for epoch in range(0,parameters['epochs']):
             losses = train_loop(parameters['train_loader'], optimizer, model, parameters)
-            train_losses[loss_idx].extends(losses)
+            train_losses[loss_idx].extend(losses)
 
             if epoch % 5 == 0:
 
                 report_slot, report_intent, losses = eval_loop(parameters['dev_loader'], model, parameters)
-                dev_losses[loss_idx].extends(losses)
+                dev_losses[loss_idx].extend(losses)
                 score = (report_slot['total']['f'] + report_intent['accuracy']) / 2
 
                 if score > S:
@@ -155,7 +154,6 @@ def train_loop(data, optimizer, model, parameters):
         total_loss = intent_loss + (slot_loss * parameters['slot_loss_coefficient'])
         losses.append(total_loss.item())
 
-        # Compute the gradient, deleting the computational graph    
         total_loss.backward()
 
         # clip the gradient to avoid explosioning gradients

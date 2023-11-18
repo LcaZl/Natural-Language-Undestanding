@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 
 PAD_TOKEN = 0
 DEVICE = 'cuda:0'
+
 def load_data(path):
     '''
         input: path/to/data
@@ -19,17 +20,16 @@ def load_data(path):
     return dataset
 
 def load_dataset():
+    print(f'Loading dataset:')
+
     tmp_train_raw = load_data('../ATIS/train.json')
     test_raw = load_data('../ATIS/test.json')
-    print(f'Dataset preparation steps:')
-    print(' - Train samples:', len(tmp_train_raw))
-    print(' - Test samples:', len(test_raw))
 
     portion = round(((len(tmp_train_raw) + len(test_raw)) * 0.10)/(len(tmp_train_raw)),2)
-    print(f' - Portion: {portion}')
 
     intents = [x['intent'] for x in tmp_train_raw] # We stratify on intents
     count_y = Counter(intents)
+
     Y = []
     X = []
     mini_Train = []
@@ -40,62 +40,15 @@ def load_dataset():
             Y.append(y)
         else:
             mini_Train.append(tmp_train_raw[id_y])
+
     # Random Stratify
-    X_train, X_dev, y_train, y_dev = train_test_split(X, Y, test_size=portion,
+    X_train, X_dev, _, _ = train_test_split(X, Y, test_size=portion,
                                                         random_state=42,
                                                         shuffle=True,
                                                         stratify=Y)
     X_train.extend(mini_Train)
     train_raw = X_train
     dev_raw = X_dev
-
-    y_test = [x['intent'] for x in test_raw]
-
-    # Intent distribution
-    print('Train:')
-    pprint({k:round(v/len(y_train),3)*100 for k, v in sorted(Counter(y_train).items())})
-    print('Dev:'),
-    pprint({k:round(v/len(y_dev),3)*100 for k, v in sorted(Counter(y_dev).items())})
-    print('Test:')
-    pprint({k:round(v/len(y_test),3)*100 for k, v in sorted(Counter(y_test).items())})
-    print('='*89)
-    # Dataset size
-    print('TRAIN size:', len(train_raw))
-    print('DEV size:', len(dev_raw))
-    print('TEST size:', len(test_raw))
-
-    w2id = {'pad':PAD_TOKEN}
-    slot2id = {'pad':PAD_TOKEN}
-    intent2id = {}
-    # Map the words only from the train set
-    # Map slot and intent labels of train, dev and test set. 'unk' is not needed.
-    for example in train_raw:
-        for w in example['utterance'].split():
-            if w not in w2id:
-                w2id[w] = len(w2id)   
-        for slot in example['slots'].split():
-            if slot not in slot2id:
-                slot2id[slot] = len(slot2id)
-        if example['intent'] not in intent2id:
-            intent2id[example['intent']] = len(intent2id)
-            
-    for example in dev_raw:
-        for slot in example['slots'].split():
-            if slot not in slot2id:
-                slot2id[slot] = len(slot2id)
-        if example['intent'] not in intent2id:
-            intent2id[example['intent']] = len(intent2id)
-            
-    for example in test_raw:
-        for slot in example['slots'].split():
-            if slot not in slot2id:
-                slot2id[slot] = len(slot2id)
-        if example['intent'] not in intent2id:
-            intent2id[example['intent']] = len(intent2id)
-
-    print('# Vocab:', len(w2id)-2) # we remove pad and unk from the count
-    print('# Slots:', len(slot2id)-1)
-    print('# Intent:', len(intent2id))
 
     words = sum([x['utterance'].split() for x in train_raw], []) # No set() since we want to compute
                                                                 # the cutoff
@@ -110,6 +63,16 @@ def load_dataset():
     train_dataset = IntentsAndSlots(train_raw, lang)
     dev_dataset = IntentsAndSlots(dev_raw, lang)
     test_dataset = IntentsAndSlots(test_raw, lang)
+
+    print(f' - Portion: {portion}')
+    print(' - Train samples:', len(tmp_train_raw))
+    print(' - Test samples:', len(test_raw))
+    print('TRAIN size:', len(train_raw))
+    print('DEV size:', len(dev_raw))
+    print('TEST size:', len(test_raw))
+    print('# Vocab:', len(lang.word2id)-2)
+    print('# Slots:', len(lang.slot2id)-1)
+    print('# Intent:', len(lang.intent2id))
 
     return train_dataset, dev_dataset, test_dataset, lang
 
@@ -141,6 +104,7 @@ class Lang():
             vocab['pad'] = PAD_TOKEN
         for elem in elements:
                 vocab[elem] = len(vocab)
+        
         return vocab
     
 class IntentsAndSlots (data.Dataset):

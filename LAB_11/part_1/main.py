@@ -74,12 +74,12 @@ if __name__ == "__main__":
 
     # Training pipeline 
 
-    mr4subj_fold_dataset, _, mr4subj_lang = load_dataset('movie_review_4subjectivity', skf, test_size, args = [subj_lang], tr_batch = 32, vl_batch = 16)
+    mr4subj_fold_dataset, _, mr4subj_lang = load_dataset('movie_review_4subjectivity', skf, test_size, args = [subj_lang], tr_batch = 80, vl_batch = 48)
 
     print('\nCreating filter for movie reviews ...')
     filter = create_subj_filter(mr4subj_fold_dataset, subj_model, subj_lang)
 
-    mr2_fold_dataset, mr2_test, mr2_lang = load_dataset('movie_review_filtered', skf, test_size, args = [filter], tr_batch = 32, vl_batch = 16)
+    mr2_fold_dataset, mr2_test, mr2_lang = load_dataset('movie_review_filtered', skf, test_size, args = [filter], tr_batch = 80, vl_batch = 48)
 
     training_parameters['polarity_model_no_obj'] = {
         **training_baseline,

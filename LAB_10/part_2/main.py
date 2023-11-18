@@ -14,9 +14,9 @@ if __name__ == "__main__":
     training_set, validation_set, test_set, lang = load_dataset()
     
     # Dataloader instantiation
-    train_loader = DataLoader(training_set, batch_size=128, collate_fn=collate_fn,  shuffle=True)
-    dev_loader = DataLoader(validation_set, batch_size=64, collate_fn=collate_fn)
-    test_loader = DataLoader(test_set, batch_size=64, collate_fn=collate_fn)
+    train_loader = DataLoader(training_set, batch_size=64, collate_fn=collate_fn,  shuffle=True)
+    dev_loader = DataLoader(validation_set, batch_size=32, collate_fn=collate_fn)
+    test_loader = DataLoader(test_set, batch_size=32, collate_fn=collate_fn)
 
 
     experiments = {
@@ -29,10 +29,10 @@ if __name__ == "__main__":
             'num_intent_labels':len(lang.intent2id),
             'vocabulary_size':len(lang.tokenizer.vocab),
             'lang':lang,
-            'epochs':20,
+            'epochs':1,
             'patience':3,
             'clip':5,
-            'runs':10,
+            'runs':1,
             'learning_rate':5e-5,
             'dropout_probabilities':0.1,
             'slot_loss_coefficient': 0.9,
@@ -49,10 +49,10 @@ if __name__ == "__main__":
             'num_intent_labels':len(lang.intent2id),
             'vocabulary_size':len(lang.tokenizer.vocab),
             'lang':lang,
-            'epochs':20,
+            'epochs':1,
             'patience':3,
             'clip':5,
-            'runs':10,
+            'runs':1,
             'learning_rate':5e-5,
             'dropout_probabilities':0.1,
             'slot_loss_coefficient': 0.9,

@@ -24,7 +24,7 @@ if __name__ == "__main__":
             'output_slots':len(lang.slot2id),
             'output_intent':len(lang.intent2id),
             'vocabulary_size':len(lang.word2id),
-            'epochs':20,
+            'epochs':200,
             'patience':3,
             'lang':lang,
             'runs':5,
@@ -61,8 +61,8 @@ if __name__ == "__main__":
     }
 
     best_model, reports, losses = execute_experiment('Experiment_1', experiments['Experiment_1'])
-    best_model2, reports2, losses2 = execute_experiment('Experiment_1', experiments['Experiment_2'])
-    best_model3, reports3, losses3 = execute_experiment('Experiment_1', experiments['Experiment_3'])
+    best_model2, reports2, losses2 = execute_experiment('Experiment_2', experiments['Experiment_2'])
+    best_model3, reports3, losses3 = execute_experiment('Experiment_3', experiments['Experiment_3'])
 
     print('reports',reports)
     print('losses',losses)

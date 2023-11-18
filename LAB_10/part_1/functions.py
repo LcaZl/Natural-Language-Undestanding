@@ -43,22 +43,22 @@ def execute_experiment(exp_id, parameters):
     for key, value in parameters.items():
         print(f' - {key}: {value}')
 
-    model_filename = f"models_weight/IAS_{exp_id}.pth"
+    model_filename = f"models/IAS_{exp_id}.pth"
 
     if os.path.exists(model_filename):
         saved_data = torch.load(model_filename)
-        print(f'Model founded. Parameters:', saved_data['parameters'])
+        print(f'Model founded.\n Parameters:', saved_data['parameters'])
         model, _ = init_model(parameters, saved_data['model_state'])
 
         best_model = (model, saved_data['best_report'])
         reports = saved_data['reports']
         losses = saved_data['losses']
-        print(f' - Pre-trained model loaded.')
+        print(f'\nPre-trained model loaded.')
 
     else:
         parameters['criterion_slots'] = nn.CrossEntropyLoss(ignore_index = PAD_TOKEN)
         parameters['criterion_intents'] = nn.CrossEntropyLoss() 
-
+        print('\nStart training:\n')
         best_model, reports, losses = train_lm(parameters)
 
         # Save model and scores
@@ -79,7 +79,7 @@ def train_lm(parameters):
     best_score = 0
     reports = []
 
-    pbar = range(parameters['runs'])
+    pbar = tqdm(range(parameters['runs']))
     for run in pbar:
 
         score, report = None, None
@@ -90,33 +90,32 @@ def train_lm(parameters):
         P = 3
         S = 0
 
-        for epoch in tqdm(range(0,parameters['epochs'])):
+        for epoch in range(0,parameters['epochs']):
 
             losses = train_loop(parameters, optimizer, model)
-            train_losses[loss_idx].expand(losses)
+            train_losses[loss_idx].extend(losses)
 
             if epoch % 5 == 0:
                 report_slot, report_intent, losses = eval_loop(parameters['dev_loader'],parameters, model)
-
-                dev_losses[loss_idx].expand(losses)
+                report = (report_slot, report_intent)
+                dev_losses[loss_idx].extend(losses)
                 
                 score = report_slot['total']['f']
 
                 if score > S:
                     S = score
-                    P = 3
                 else:
                     P -= 1
 
                 if P <= 0: # Early stopping with patience
                     break # Not nice but it keeps the code clean
         
-                pbar.set_description(f'Run {run} - Epoch {epoch} - L: {round(np.mean(losses), 3)} - S:{score} - Report:{report}')
+                pbar.set_description(f'Run {run} - Epoch {epoch} - L: {round(np.mean(losses), 3)} - F1:{score}')
 
-        results_test, intent_test, _ = eval_loop(parameters['test_loader'], parameters, model)
-        report = (run, results_test, intent_test)
+        report_slot, report_intent, _ = eval_loop(parameters['test_loader'], parameters, model)
+        report = (run, report_slot, report_intent)
         reports.append(report)
-        score = results_test['total']['f']
+        score = report_slot['total']['f']
 
         if score > best_score:
             best_score = score
@@ -208,10 +207,8 @@ def eval_loop(data, parameters, model):
         report_slot = evaluate(ref_slots, hyp_slots)
     except Exception as ex:
         # Sometimes the model predics a class that is not in REF
-        print(ex)
-        ref_s = set([x[1] for x in ref_slots])
-        hyp_s = set([x[1] for x in hyp_slots])
-        print(hyp_s.difference(ref_s))
+        print('Exception:', ex)
+        report_slot = None
 
     report_intent = classification_report(ref_intents, hyp_intents,
                                           zero_division=False, output_dict=True)
