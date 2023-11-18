@@ -60,6 +60,34 @@ if __name__ == "__main__":
         }
     }
 
-    results = execute_experiments(experiments)
-    print('\nExperiments comparison:\n')
-    print(tabulate(results, headers='keys', tablefmt='grid', showindex=True))
+    best_model, reports, losses = execute_experiment('Experiment_1', experiments['Experiment_1'])
+    best_model2, reports2, losses2 = execute_experiment('Experiment_1', experiments['Experiment_2'])
+    best_model3, reports3, losses3 = execute_experiment('Experiment_1', experiments['Experiment_3'])
+
+    print('reports',reports)
+    print('losses',losses)
+    print('reports2',reports2)
+    print('losses2',losses2)
+    print('reports3',reports3)
+    print('losses3',losses3)
+
+"""
+    cols = ['Id','Run','Accuracy','Accuracy Std','F score', 'F Std']
+    scores = pd.DataFrame(columns = cols)
+        experiment_result = pd.DataFrame(columns=cols, 
+                                data = [[exp_id, run, accuracy, 0, f1, 0]])
+        print(tabulate(experiment_result, headers='keys', tablefmt='grid', showindex=True))
+        scores = pd.concat([scores, experiment_result])
+
+        slot_f1s = np.asarray(slot_f1s)
+        intent_acc = np.asarray(intent_acc)
+        f1_avg = round(slot_f1s.mean(),3)
+        f1_std = round(slot_f1s.std(),3)
+        accuracy_avg = round(intent_acc.mean(), 3)
+        accuracy_std = round(intent_acc.std(), 3)
+        experiment_result = pd.DataFrame(columns=cols, 
+                                data = [[exp_id, 'Average', accuracy_avg, accuracy_std, f1_avg, f1_std]])
+        
+        scores = pd.concat([scores, experiment_result])
+        #print(tabulate(scores, headers='keys', tablefmt='grid', showindex=True))
+"""

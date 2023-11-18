@@ -55,6 +55,7 @@ def train_model(parameters):
         model, _ = init_model(parameters, saved_data['model_state'])
         reports = saved_data['report']
         best_report = saved_data['best_report']
+        #losses = saved_data['losses']
     else:
         best_model, reports, losses = train_lm(parameters)
         best_params = parameters
@@ -68,7 +69,8 @@ def train_model(parameters):
             'model_state': model.state_dict(),
             'report': reports,
             'best_report': best_report,
-            'parameters': best_params 
+            'parameters': best_params,
+            'losses':losses
         }
         torch.save(data_to_save, model_filename)
 
@@ -78,11 +80,11 @@ def train_model(parameters):
     return model, training_report, best_report
 
 def train_lm(parameters):
-    runs = parameters['runs']
-    epochs = parameters['epochs']
-    losses = {}
+    dev_losses = {}
+    train_losses = {}
     reports = []
     best_score = 0
+    
     cols = ['Fold', 'Run', 'ot_precision', 'ot_recall', 'ot_f1', 'ts_macro_f1', 'ts_micro_p', 'ts_micro_r', 'ts_micro_f1']
 
     for i in range(0, len(parameters['train_folds'])):
@@ -100,17 +102,18 @@ def train_lm(parameters):
 
             model, optimizer = init_model(parameters)
             loss_idx = f'fold_{i}-run_{r}'
-            losses[loss_idx] = []
+            train_losses[loss_idx], dev_losses[loss_idx] = [], []
+
             P = 3
             S = 0
 
             for epoch in range(parameters['epochs']):        
-                loss = train_loop(train_loader, optimizer, model, parameters)
-                losses[loss_idx].append(loss)
+                losses = train_loop(train_loader, optimizer, model, parameters)
+                train_losses[loss_idx].extend(loss)
 
                 if epoch % 5 == 0:
-                    _, score, report = evaluation(model, parameters, dev_loader)
-
+                    losses, score, report = evaluation(model, parameters, dev_loader)
+                    dev_losses[loss_idx].extend(losses)     
                     if score > S:
                         S = score
                     else:
@@ -119,7 +122,7 @@ def train_lm(parameters):
                     if P <= 0:
                         break
                                     
-                pbar.set_description(f'Run {r}/{runs} - Epoch {epoch}/{epochs} - L: {loss} - S:{score} - Report:{report}')
+                pbar.set_description(f'Run {r} - Epoch {epoch} - L: {round(np.mean(losses), 3)} - S:{score} - Report:{report}')
 
             _, score, report = evaluation(model, parameters, parameters['test_loader'])
             report = [i] + [r] + report
@@ -132,10 +135,11 @@ def train_lm(parameters):
         fold_df = pd.DataFrame(fold_reports, columns=cols).set_index('Fold')
         print(tabulate(fold_df, headers='keys', tablefmt='grid', showindex=True))
         print(best_model[1])
-    return best_model, reports, losses
+
+    return best_model, reports, (train_losses, dev_losses)
 
 def evaluation(model, parameters, dataset):
-    loss, ote_report, ts_report = eval_loop(dataset, model, parameters)
+    losses, ote_report, ts_report = eval_loop(dataset, model, parameters)
 
     ot_f = round(ote_report[2], 3)
     ot_prec = round(ote_report[0], 3)
@@ -144,7 +148,7 @@ def evaluation(model, parameters, dataset):
     score = round(np.mean([ot_f, ot_prec, ts_f, ts_prec]), 2)
     report = [round(el, 3) for el in (ote_report + ts_report)]
 
-    return loss, score, report
+    return losses, score, report
 
 def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     attention_mask = sample['attention_mask'][:, 1:-1]
@@ -248,7 +252,7 @@ def train_loop(data_loader, optimizer, model, parameters):
         torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
         optimizer.step()
 
-    return round(np.mean(losses), 3)
+    return losses
 
 def eval_loop(data_loader, model, parameters):
     model.eval()
@@ -272,5 +276,5 @@ def eval_loop(data_loader, model, parameters):
             pred_ts.extend(pred_ts_)
 
     ote_report, ts_report = evaluate(gold_ot, gold_ts, pred_ot, pred_ts)
-    return round(np.mean(losses), 3), ote_report, ts_report
+    return losses, ote_report, ts_report
     

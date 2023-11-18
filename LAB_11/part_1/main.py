@@ -6,7 +6,7 @@ if __name__ == "__main__":
     # Print the results
 
     test_size = 0.1 # Train, dev, test
-    FOLDS = 2
+    FOLDS = 10
     skf = StratifiedKFold(n_splits=FOLDS, random_state=42, shuffle = True)
 
     grid_search_parameters = {
@@ -20,7 +20,7 @@ if __name__ == "__main__":
             'clip':5,
             'n_splits':FOLDS,
             'epochs':200,
-            'runs':1,
+            'runs':3,
             'output_size':1,
             'criterion': nn.BCEWithLogitsLoss(),
             'optimizer':'Adam',
@@ -38,7 +38,7 @@ if __name__ == "__main__":
 
             'task':'subjectivity_detection',
             'learning_rate': 5e-5, #0.0005
-            'dropout':0.0,      
+            'dropout':0.05,      
 
             'vocab_size': subj_lang.vocab_size,
             'train_folds':subj_fold_dataset,
@@ -58,8 +58,8 @@ if __name__ == "__main__":
             **training_baseline,
 
             'task':'polarity_detection',
-            'learning_rate': 1e-4,
-            'dropout':0.05,         
+            'learning_rate': 5e-5,
+            'dropout':0,         
 
             'vocab_size': mr_lang.vocab_size,
             'train_folds':mr_fold_dataset,
@@ -76,8 +76,8 @@ if __name__ == "__main__":
 
     mr4subj_fold_dataset, _, mr4subj_lang = load_dataset('movie_review_4subjectivity', skf, test_size, args = [subj_lang], tr_batch = 32, vl_batch = 16)
 
-    print('\nFiltering sentences of movie reviews ...')
-    filter = create_subj_filter(mr4subj_fold_dataset, subj_model, mr_lang, subj_lang)
+    print('\nCreating filter for movie reviews ...')
+    filter = create_subj_filter(mr4subj_fold_dataset, subj_model, subj_lang)
 
     mr2_fold_dataset, mr2_test, mr2_lang = load_dataset('movie_review_filtered', skf, test_size, args = [filter], tr_batch = 32, vl_batch = 16)
 
@@ -86,7 +86,7 @@ if __name__ == "__main__":
         
         'task':'polarity_detection_with_filtered_dataset',
         'learning_rate': 5e-5,
-        'dropout':0.1,
+        'dropout':0.0,
 
         'vocab_size': mr2_lang.vocab_size,
         'train_folds':mr2_fold_dataset,

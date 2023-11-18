@@ -62,6 +62,15 @@ if __name__ == "__main__":
             
     }
 
-    results = execute_experiments(experiments)
+    cols = ['Id','Run','Accuracy','Accuracy Std.','F-score', 'F-score Std.']
+    scores = pd.DataFrame(columns = cols)
+
+    reports, best_model, losses = execute_experiment('Experiment_1', experiments['Experiment_1'])
+    reports2, best_model2, losses2 = execute_experiment('Experiment_2', experiments['Experiment_2'])
+
+    print('reports',reports)
+    print('losses',losses)
+    print('reports2',reports2)
+    print('losses2',losses2)
+
     print('\nExperiments comparison:\n')
-    print(tabulate(results, headers='keys', tablefmt='grid', showindex=True))

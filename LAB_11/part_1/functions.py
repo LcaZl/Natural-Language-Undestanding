@@ -34,27 +34,22 @@ def train_model(parameters):
     if os.path.exists(model_filename): # Model founded
         saved_data = torch.load(model_filename)
         print(f'Model founded. Parameters:', saved_data['parameters'])
-        model, _ = init_model(parameters, saved_data['model_state'])
+        model, _ = init_model(saved_data['parameters'], saved_data['model_state'])
         reports = saved_data['report']
+        #losses = saved_data['losses']
+
     else:
-        if parameters['grid_search']: #
-            best_model, reports, losses, best_params = grid_search(parameters)
-        else:
-            best_model, reports, losses = train_lm(parameters)
-            best_params = parameters
+        best_model, reports, losses = train_lm(parameters)
+
         model = best_model[0]
-
-        for fold, losses in losses.items():
-            print(f'Loss for {fold}:{losses}')
-
-        if (parameters['task'] != 'polarity_detection_with_filtered_dataset'):
-            data_to_save = {
-                'model_state': model.state_dict(),
-                'best_report': best_model[1],
-                'parameters':best_params,
-                'report':reports
-            }
-            torch.save(data_to_save, model_filename)
+        data_to_save = {
+            'model_state': best_model[0].state_dict(),
+            'best_report': best_model[1],
+            'parameters':parameters,
+            'report':reports,
+            'losses':losses
+        }
+        torch.save(data_to_save, model_filename)
 
     cols = ['Fold','Run','F1-score', 'Accuracy']
     training_report = pd.DataFrame(reports, columns=cols).set_index('Fold')
@@ -82,7 +77,9 @@ def init_model(parameters, model_state = None):
 
 def train_lm(parameters):
     cols = ['Fold','Run','F1-score', 'Accuracy']
-    losses = {}
+    dev_losses = {}
+    train_losses = {}
+
     reports = []
     best_score = 0
 
@@ -97,19 +94,21 @@ def train_lm(parameters):
         for r in pbar:
 
             model, optimizer = init_model(parameters)
-            loss_idx = f'Fold_{i}'
-            losses[loss_idx] = []
+            loss_idx = f'Fold_{i}-run_{r}'
+            train_losses[loss_idx], dev_losses[loss_idx] = [], []
+             
             P = 3
             S = 0
 
             for epoch in range(0, parameters['epochs']):   
 
-                loss = train_loop(train_loader, optimizer, model, parameters)
-                losses[loss_idx].append(loss)
+                losses = train_loop(train_loader, optimizer, model, parameters)
+                train_losses[loss_idx].extend(losses)
 
                 if epoch % 2:
-                    _, score, report = evaluation(model, parameters, dev_loader)
-                    
+                    losses, score, report = evaluation(model, parameters, dev_loader)
+                    dev_losses[loss_idx].extend(losses)
+
                     if score > S:
                         S = score
                     else:
@@ -118,7 +117,7 @@ def train_lm(parameters):
                     if P <= 0:
                         break
 
-                pbar.set_description(f'Run {r} - Epoch {epoch} - L: {loss} - S:{score} - Report:{report}')
+                pbar.set_description(f'Run {r} - Epoch {epoch} - L: {round(np.mean(losses), 3)} - S:{score} - Report:{report}')
 
             _, score, report = evaluation(model, parameters, parameters['test_loader'])
 
@@ -133,8 +132,8 @@ def train_lm(parameters):
         fold_df = pd.DataFrame(fold_reports, columns=cols).set_index('Fold')
         print(tabulate(fold_df, headers='keys', tablefmt='grid', showindex=True))
         print(best_model[1])
-
-    return best_model, reports, losses
+        
+    return best_model, reports, (train_losses, dev_losses)
 
 def train_loop(data_loader, optimizer, model, parameters):
     model.train()
@@ -155,16 +154,16 @@ def train_loop(data_loader, optimizer, model, parameters):
         torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
         optimizer.step()
 
-    return round(np.mean(losses), 3)
+    return losses
 
 def evaluation(model, parameters, dataset):
 
-    loss, report = eval_loop(dataset, model, parameters)
+    losses, report = eval_loop(dataset, model, parameters)
     f = round(report['macro avg']['f1-score'], 4)
     acc = round(report['accuracy'], 4)
     score = round(np.mean([f, acc]), 4)
     report = [f, acc]
-    return loss, score, report
+    return losses, score, report
 
 def eval_loop(data_loader, model, parameters):
     model.eval()
@@ -189,9 +188,9 @@ def eval_loop(data_loader, model, parameters):
 
     report = classification_report(all_labels, all_preds, zero_division=False, output_dict=True)
 
-    return round(np.mean(losses), 3), report
+    return losses, report
 
-def create_subj_filter(dataset, model, lang, subj_lang):
+def create_subj_filter(dataset, model, subj_lang):
     model.to(DEVICE)
     model.eval()
     filter = []

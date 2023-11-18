@@ -77,7 +77,7 @@ def filter_movie_reviews(filter):
     new_mr = {}
     categories = mr.categories()
 
-    filter = set([' '.join(sentence) for sentence in filter])
+    #filter = set([' '.join(sentence) for sentence in filter])
 
     for category in categories: # ['neg','pos']
 
@@ -116,15 +116,10 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = [], tr_batch = 64,
         categories = mr.categories()
 
         # We only need the sentences, no other information and no distinction.
-        all_sentences = []
-
-        for file_id in tqdm(movie_reviews.fileids(categories='neg')):
-            all_sentences.extend(preprocess(movie_reviews.sents(file_id), 'neg', file_id=file_id))
-        for file_id in tqdm(movie_reviews.fileids(categories='pos')):
-            all_sentences.extend(preprocess(movie_reviews.sents(file_id), 'pos', file_id=file_id))
+        all_sentences = preprocess(movie_reviews.sents(), 'neg')
 
         lang = Lang(categories)
-        dataset = Dataset(all_sentences, args[0])
+        dataset = Dataset(all_sentences, lang)
         dataloader = DataLoader(dataset, batch_size = tr_batch, collate_fn = collate_fn)
 
         return dataloader, None, lang
@@ -156,14 +151,14 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = [], tr_batch = 64,
 
         print(f' - FOLD {k} - Train Size: {len(train_samples)} - Val Size: {len(val_samples)}')
 
-        train_dataset = Dataset(val_samples, lang)
+        train_dataset = Dataset(train_samples, lang)
         val_dataset = Dataset(val_samples, lang)
         train_loader = DataLoader(train_dataset, batch_size = tr_batch, shuffle = True, collate_fn = collate_fn)
         val_loader = DataLoader(val_dataset, batch_size = vl_batch, shuffle = True, collate_fn = collate_fn)
         fold_datasets.append((train_loader, val_loader))
 
     print(f' - TEST SET - Size: {len(test_sentences)}')
-    test_dataset = Dataset(val_samples, lang)
+    test_dataset = Dataset(test_sentences, lang)
     test_loader = DataLoader(test_dataset, batch_size = tr_batch, shuffle = True, collate_fn = collate_fn)
 
     # Info

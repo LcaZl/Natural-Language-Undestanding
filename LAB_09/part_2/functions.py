@@ -279,8 +279,6 @@ def load_model_and_print_ppl(model, model_path, test_loader, criterion_eval, dev
     return ppl
 
 ## from LAB_09
-
-
 def train_loop(data, optimizer, criterion, model, clip=5):
     model.train()
     loss_array = []

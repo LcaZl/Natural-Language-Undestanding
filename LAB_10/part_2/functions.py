@@ -17,134 +17,114 @@ import math
 from utils import *
 from model import *
 
-def execute_experiments(experiments_parameters):
 
-    cols = ['Id','Run','Accuracy','Accuracy Std.','F-score', 'F-score Std.']
-    scores = pd.DataFrame(columns = cols)
+def init_model(parameters, model_state = None):
+    optimizer = None
+    model = jointBERT(out_slot=parameters['num_slot_labels'],
+                    out_int=parameters['num_intent_labels'],
+                    dropout_rate=parameters['dropout_probabilities']).to(DEVICE)
 
-    for exp_id, parameters in experiments_parameters.items():
+    if model_state:
+        model.load_state_dict(model_state)
+    else:
+        model.apply(init_weights)
+        optimizer = optim.Adam(model.parameters(), lr = parameters['learning_rate'])
+
+    return model, optimizer
+
+def execute_experiment(exp_id, parameters):
         
-        # Current experiment information
-        print(f'\n-------- {exp_id} --------\n')
-        print('Parameters:\n')
-        for key, value in parameters.items():
-            print(f' - {key}: {value}')
+    # Current experiment information
+    print(f'\n-------- {exp_id} --------\n')
+    print('Parameters:\n')
+    for key, value in parameters.items():
+        print(f' - {key}: {value}')
 
-        print(f'\nStart Training:')
-        slot_f1s, intent_acc, slsf_accuracies = [], [], []
+    print(f'\nStart Training:')
 
-        for run in range(parameters['runs']):
-            print(f'- Run {run}')
-            model_filename = f"models_weight/{exp_id}_run{run}.pth"
+    model_filename = f"models_weight/JB_{exp_id}.pth"
 
-            if os.path.exists(model_filename):
-                saved_data = torch.load(model_filename)
-                
-                model = jointBERT(out_slot=parameters['num_slot_labels'],
-                                 out_int=parameters['num_intent_labels'],
-                                 dropout_rate=parameters['dropout_probabilities']).to(DEVICE)
-                model.load_state_dict(saved_data['model_state'])
+    if os.path.exists(model_filename):
+        saved_data = torch.load(model_filename)
+        model, _ = init_model(parameters, model_state=saved_data['model_state'])
 
-                f1 = saved_data['slot_f1']
-                accuracy = saved_data['intent_acc']
-                train_losses = saved_data['train_losses']
-                eval_losses = saved_data['eval_losses']
+        reports = saved_data['reports']
+        best_model = (model, saved_data['best_report'])
+        losses = saved_data['losses']
+        parameters = saved_data['parameters']
 
-                intent_acc.append(accuracy)
-                slot_f1s.append(f1)
-                print(f' - Pre-trained model loaded.')
+        print(f' - Pre-trained model loaded.')
 
-            else:
-                model = jointBERT(out_slot=parameters['num_slot_labels'],
-                                 out_int=parameters['num_intent_labels'],
-                                 dropout_rate=parameters['dropout_probabilities']).to(DEVICE)
-                
-                optimizer = optim.Adam(model.parameters(), lr = parameters['learning_rate'])
-                report_slot, report_intent, train_losses, eval_losses = train_lm(model, parameters, optimizer)
+    else:
 
-                f1 = report_slot['total']['f']
-                accuracy = report_intent['accuracy']
-                intent_acc.append(accuracy)
-                slot_f1s.append(f1)
+        best_model, reports, losses = train_lm(parameters)
 
-                # Save model and scores
-                data_to_save = {
-                    'model_state': model.state_dict(),
-                    'slot_f1': f1,
-                    'intent_acc': accuracy,
-                    'train_losses':train_losses,
-                    'eval_losses':eval_losses
-                }
-                torch.save(data_to_save, model_filename)
+        # Save model and scores
+        data_to_save = {
+            'model_state': best_model[0].state_dict(),
+            'reports': reports,
+            'best_report':best_model[1],
+            'parameters':parameters,
+            'losses':losses
+        }
+        torch.save(data_to_save, model_filename)
 
-            data = [exp_id, run, accuracy, 0, f1, 0]
-            experiment_result = pd.DataFrame(columns=cols, data = [data])
-            scores = pd.concat([scores, experiment_result])
-            print(tabulate(experiment_result, headers='keys', tablefmt='grid', showindex=True))
-            print('-  Training losses :', train_losses)
-            print('- Evaluation losses:', eval_losses)
+    return reports, best_model, losses
 
-        slot_f1s = np.asarray(slot_f1s)
-        intent_acc = np.asarray(intent_acc)
-        f1_avg = round(slot_f1s.mean(),3)
-        f1_std = round(slot_f1s.std(),3)
-        accuracy_avg = round(intent_acc.mean(), 3)
-        accuracy_std = round(intent_acc.std(), 3)
+def train_lm(parameters):
+    train_losses = {}
+    dev_losses = []
+    best_score = 0
+    reports = []
 
-        experiment_result = pd.DataFrame(columns=cols, 
-                                data = [[exp_id, 'Average', accuracy_avg, accuracy_std, f1_avg, f1_std]])
-        
-        scores = pd.concat([scores, experiment_result])
-        print(tabulate(scores, headers='keys', tablefmt='grid', showindex=True))
+    pbar = tqdm(parameters['runs'])
+    for r in pbar:
 
-    return scores
+        score, report = None, None
+        model, optimizer = init_model(parameters)
+        loss_idx = f'run_{r}'
+        train_losses[loss_idx] = []
+        dev_losses[loss_idx] = []
 
-def train_lm(model, parameters, optimizer):
-    losses_train = []
-    losses_eval = []
-    sampled_epochs = []
-    best_loss = math.inf
-    patience = 3
-    for x in tqdm(range(0,parameters['epochs'])):
-        loss, _, _ = train_loop(parameters['train_loader'], optimizer, model, parameters)
-        losses_train.append(np.asarray(loss).mean())
+        P = 3
+        S = 0
 
-        if x % 5 == 0:
-            sampled_epochs.append(x)
+        for epoch in tqdm(range(0,parameters['epochs'])):
+            losses = train_loop(parameters['train_loader'], optimizer, model, parameters)
+            train_losses[loss_idx].extends(losses)
 
-            _, _, eval_total_loss = eval_loop(parameters['dev_loader'], model, parameters)
-            eval_mean_loss = np.asarray(eval_total_loss).mean()
-            losses_eval.append(eval_mean_loss)
+            if epoch % 5 == 0:
 
-            if eval_mean_loss < best_loss:
-                best_loss = eval_mean_loss
-                patience = 3
-            else:
-                patience -= 1
-            if patience <= 0: # Early stopping with patience
-                break # Not nice but it keeps the code clean
+                report_slot, report_intent, losses = eval_loop(parameters['dev_loader'], model, parameters)
+                dev_losses[loss_idx].extends(losses)
+                score = (report_slot['total']['f'] + report_intent['accuracy']) / 2
 
-    report_slot, report_intent, eval_total_loss = eval_loop(parameters['test_loader'], model, parameters)
-    eval_mean_loss = np.asarray(eval_total_loss).mean()
-    losses_eval.append(eval_mean_loss)
+                if score > S:
+                    S = score
+                else:
+                    P -= 1
 
-    #plt.figure(num = 3, figsize=(8, 5)).patch.set_facecolor('white')
-    #plt.title('Train and Dev Losses')
-    #plt.ylabel('Loss')
-    #plt.xlabel('Epochs')
-    #plt.plot(sampled_epochs, losses_train, label='Train loss')
-    #plt.plot(sampled_epochs, losses_dev, label='Dev loss')
-    #plt.legend()
-    #plt.show()
+                if P <= 0: # Early stopping with patience
+                    break # Not nice but it keeps the code clean
 
-    return report_slot, report_intent, losses_train, losses_eval
+                pbar.set_description(f'Run {r} - Epoch {epoch} - L: {round(np.mean(losses), 3)} - S:{score} - Report:{report}')
+
+        report_slot, report_intent, _ = eval_loop(parameters['test_loader'], model, parameters)
+        report = (r, report_slot, report_intent)
+        reports.append(report)
+
+        score = (report_slot['total']['f'] + report_intent['accuracy']) / 2
+
+        if score > best_score:
+            best_score = score
+            best_model = (model, report)
+
+    return best_model, reports, (train_losses, dev_losses)
 
 def train_loop(data, optimizer, model, parameters):
                
     model.train()
-    total_loss_array = []
-    intent_loss_array = []
-    slot_loss_array = []
+    losses = []
 
     for sample in data:
         optimizer.zero_grad() # Zeroing the gradient
@@ -161,7 +141,6 @@ def train_loop(data, optimizer, model, parameters):
 
         # 1. Intent Loss
         intent_loss = parameters['criterion_intents'](intent_logits.view(-1, parameters['num_intent_labels']), sample['intents'].view(-1))
-        intent_loss_array.append(intent_loss.item())
         
         # 2. Slot Loss
         if (parameters['use_crf']):
@@ -172,11 +151,9 @@ def train_loop(data, optimizer, model, parameters):
             active_labels = sample['y_slots'].view(-1)[active_loss]
             slot_loss = parameters['criterion_slots'](active_logits, active_labels)
 
-        slot_loss_array.append(slot_loss.item())        
-
         # 3. Total Loss
         total_loss = intent_loss + (slot_loss * parameters['slot_loss_coefficient'])
-        total_loss_array.append(total_loss.item())
+        losses.append(total_loss.item())
 
         # Compute the gradient, deleting the computational graph    
         total_loss.backward()
@@ -185,7 +162,7 @@ def train_loop(data, optimizer, model, parameters):
         torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
         optimizer.step() # Update the weights
 
-    return total_loss_array, intent_loss_array, slot_loss_array
+    return losses
 
 def eval_loop(data, model, parameters):
 
@@ -193,8 +170,9 @@ def eval_loop(data, model, parameters):
 
     ref_intents, hyp_intents = [], []
     ref_slots, hyp_slots = [], []
-    intent_loss_array, slot_loss_array, total_loss_array = [], [], []
-    with torch.no_grad():  # Avoid the creation of a computational graph
+    losses = []
+
+    with torch.no_grad():
 
         for sample in data:
             current_ref_slots, current_hyp_slots = [], []
@@ -203,7 +181,6 @@ def eval_loop(data, model, parameters):
 
             # 1. Intent Loss
             intent_loss = parameters['criterion_intents'](intent_logits.view(-1, parameters['num_intent_labels']), sample['intents'].view(-1))
-            intent_loss_array.append(intent_loss.item())
 
             # 2. Slot Loss
             if (parameters['use_crf']):
@@ -213,11 +190,10 @@ def eval_loop(data, model, parameters):
                 active_logits = slot_logits.view(-1, parameters['num_slot_labels'])[active_loss]
                 active_labels = sample['y_slots'].view(-1)[active_loss]
                 slot_loss = parameters['criterion_slots'](active_logits, active_labels)      
-            slot_loss_array.append(slot_loss.item())
 
             # 3. Total Loss
             total_loss = intent_loss + (slot_loss * parameters['slot_loss_coefficient'])
-            total_loss_array.append(total_loss.item())
+            losses.append(total_loss.item())
 
             # Intent inference
             out_intents = [parameters['lang'].id2intent.get(x, '[UNK]') for x in torch.argmax(intent_logits, dim=1).tolist()]
@@ -270,4 +246,4 @@ def eval_loop(data, model, parameters):
     report_intent = classification_report(ref_intents, hyp_intents,
                                           zero_division=False, output_dict=True)
     
-    return report_slot, report_intent, total_loss_array
+    return report_slot, report_intent, losses
