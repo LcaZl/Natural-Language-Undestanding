@@ -51,6 +51,7 @@ if __name__ == "__main__":
     subj_model, subj_training_report = train_model(training_parameters['Subj_model'])
     print('\nOutput:\n',tabulate(subj_training_report, headers='keys', tablefmt='grid', showindex=True))
 
+    """
     # Training for polarity
     mr_fold_dataset, mr_test, mr_lang = load_dataset('Movie_reviews', skf, test_size, tr_batch = 80, vl_batch = 48)
 
@@ -71,13 +72,16 @@ if __name__ == "__main__":
     
     pol_model, pol_training_report = train_model(training_parameters['polarity_model'])
     print('\nOutput:\n',tabulate(pol_training_report, headers='keys', tablefmt='grid', showindex=True))
-
+    """
     # Training pipeline 
 
     mr4subj_fold_dataset, _, mr4subj_lang = load_dataset('movie_review_4subjectivity', skf, test_size, args = [subj_lang], tr_batch = 80, vl_batch = 48)
 
     print('\nCreating filter for movie reviews ...')
     filter = create_subj_filter(mr4subj_fold_dataset, subj_model, subj_lang)
+
+    print('Filter', len(filter))
+    print(filter[0])
 
     mr2_fold_dataset, mr2_test, mr2_lang = load_dataset('movie_review_filtered', skf, test_size, args = [filter], tr_batch = 80, vl_batch = 48)
 

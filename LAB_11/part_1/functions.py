@@ -202,11 +202,14 @@ def create_subj_filter(dataset, model, subj_lang):
             outputs = model(sample['text'], sample['attention_masks'])
             predictions = torch.round(torch.sigmoid(outputs))
             subjective_mask = predictions.view(-1) == 0 # Id 0 means objective sentence
-
+            
             for i in range(sample['text'].size(0)):
                 if subj_lang.id2class[subjective_mask.tolist()[i]] == REMOVE_CLASS:
 
-                    filter.append(sample['text'][i].tolist()[1:-1]) # Append clean decoded comparable text
+                    # Rimuovi CLS, SEP e padding
+                    text_ids = sample['text'][i].tolist()
+                    clean_text_ids = [id for id in text_ids if id != PAD_TOKEN]
+                    filter.append(clean_text_ids)
 
     return filter
 

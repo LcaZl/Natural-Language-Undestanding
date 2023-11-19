@@ -79,6 +79,10 @@ def filter_movie_reviews(filter):
 
     #filter = set([' '.join(sentence) for sentence in filter])
 
+    print(' - Filter size:', len(filter))
+    print(' - Movie review pos sent:', len(movie_reviews.sents(categories = 'pos')))
+    print(' - Movie review neg sent:', len(movie_reviews.sents(categories = 'neg')))
+
     for category in categories: # ['neg','pos']
 
             processed_set = preprocess(movie_reviews.sents(categories = category), label=category, mark_neg=True)                
@@ -88,6 +92,8 @@ def filter_movie_reviews(filter):
                 if sent not in filter:
                     new_mr[category].append(sample)
             
+    print(' - Filtered Movie review pos sent:', len(new_mr['pos']))
+    print(' - Filtered Movie review neg sent:', len(new_mr['neg']))
     return new_mr
     
 def load_dataset(dataset_name, kfold, test_size = 0.1, args = [], tr_batch = 64, vl_batch = 32):
@@ -179,7 +185,9 @@ class Lang:
 
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         self.vocab_size = len(self.tokenizer.vocab)
-
+        self.cls_token_id = self.tokenizer.cls_token_id
+        self.sep_token_id = self.tokenizer.sep_token_id
+        
         self.class2id = {}
         for i, cls in enumerate(classes):
             self.class2id[cls] = i
