@@ -5,7 +5,6 @@ import pandas as pd
 from tabulate import tabulate
 import math
 import torch.optim as optim
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 import copy
 import torch
@@ -44,7 +43,7 @@ def execute_experiments(experiments):
 
             sents_len = [experiment_parameters['train_max_len'], experiment_parameters['dev_max_len'], experiment_parameters['test_max_len']]
             # Experiment also with a smaller or bigger model by changing hid and emb sizes 
-            model = LM_(
+            model = LangModel(
                         nn_type = experiment_parameters['model_name'],
                         emb_size = experiment_parameters['embedded_layer_size'], 
                         hidden_size = experiment_parameters['hidden_layer_size'], 
@@ -74,7 +73,7 @@ def execute_experiments(experiments):
                 print(f'\nStart training ... \n')
 
                 if experiment_parameters['optmz_type'] == 'NT-AvSGD':
-                    model_score = train_lm_nt_avsgd(experiment_parameters, model,  optimizer)
+                    model_score = train_LangModelnt_avsgd(experiment_parameters, model,  optimizer)
                 else:
                     model_score = train_lm(experiment_parameters, model, optimizer)
             
@@ -103,6 +102,7 @@ def train_lm(parameters, model, optimizer):
         best_ppl = math.inf
         best_model = None
         pbar = tqdm(range(0,parameters['n_epochs']))
+
 
         for epoch in pbar:
 
@@ -138,7 +138,7 @@ def average_weights(weight_list):
         avg_weights[key] = sum([weights[key] for weights in weight_list]) / len(weight_list)
     return avg_weights
 
-def train_lm_nt_avsgd(parameters, model, optimizer):
+def train_LangModelnt_avsgd(parameters, model, optimizer):
         """
         Train a language model using non monotonic averaged SGD.
 
@@ -159,10 +159,7 @@ def train_lm_nt_avsgd(parameters, model, optimizer):
 
         pbar = tqdm(range(0, parameters['n_epochs']))  # Inizio da 0
         for epoch_K in pbar:
-
-            if model.variational_dropout:
-                model.reset_vd_mask()
-                
+            
             loss = train_loop(parameters['train_loader'], optimizer, parameters['criterion_train'], model, parameters['clip'])    
                         
             if epoch_K % parameters['logging_interval'] == 0 and T == 0:  # Controlla se questa condizione è mai vera                      

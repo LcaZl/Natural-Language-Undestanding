@@ -42,7 +42,7 @@ def execute_experiments(experiments):
             for key, value in experiment_parameters.items():
                 print(f' - {key}: {value}')
 
-            model = LM_(
+            model = LangModel(
                         experiment_parameters['model_name'],
                         experiment_parameters['embedded_layer_size'], 
                         experiment_parameters['hidden_layer_size'], 

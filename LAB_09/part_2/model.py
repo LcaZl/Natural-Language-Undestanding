@@ -1,11 +1,12 @@
 import torch.nn as nn
 import torch
+from utils import *
 
-class LM_(nn.Module):
+class LangModel(nn.Module):
     def __init__(self, nn_type, emb_size, hidden_size, output_size, pad_index=0, 
                  out_dp_prob=0, emb_dp_prob=0, variational_dp_prob=0.5, # Variational dropout probability
                  n_layers=1, weight_tying=False, variational_dropout=False, max_len=100):
-        super(LM_, self).__init__()
+        super(LangModel, self).__init__()
         
         # Token ids to vectors
         self.embedding = nn.Embedding(output_size, emb_size, padding_idx=pad_index)
@@ -33,15 +34,18 @@ class LM_(nn.Module):
         emb = self.embedding(input_sequence)
 
         if self.variational_dropout:
-            mask = self.generate_vd_mask(emb, emb.size(0))
-            emb = emb * mask
+            if self.emb_vd_mask is None:
+                self.emb_vd_mask = self.generate_vd_mask(emb.size(2), emb.size(0))[:, :emb.size(1), :]
+            emb = emb * self.emb_vd_mask
         else:
             emb = self.embedding_dropout(emb)            
 
         rnn_out, _ = self.rnn(emb)
 
         if self.variational_dropout:
-            rnn_out = rnn_out * mask[:, :, :rnn_out.size(2)]
+            if self.rnn_vd_mask is None:
+                self.rnn_vd_mask = self.generate_vd_mask(rnn_out.size(2), rnn_out.size(0))[:, :rnn_out.size(1), :]
+            rnn_out = rnn_out * self.rnn_vd_mask
         else:
             rnn_out = self.output_dropout(rnn_out)
 
@@ -69,15 +73,11 @@ class LM_(nn.Module):
         top_scores = scores[indexes]
         return (indexes, top_scores)
     
-    def generate_vd_mask(self, emb, batch_size):
-        _, current_seq_length, _ = emb.shape
-        scale = 1 / (1 - self.variational_dp_prob)
-        
-        if self.vd_mask is None or self.vd_mask.shape[1] < current_seq_length or self.vd_mask.shape[0] != batch_size:
-            self.vd_mask = torch.bernoulli(torch.full((batch_size, self.max_seq_length, emb.size(2)), self.variational_dp_prob)).to(emb.device) * scale
-        
-        return self.vd_mask[:, :current_seq_length, :]
-
-    
     def reset_vd_mask(self):
-        self.vd_mask = None
+        self.emb_vd_mask = None
+        self.rnn_vd_mask = None
+
+    def generate_vd_mask(self, size, batch_size):
+        scale = 1 / (1 - self.variational_dp_prob)
+        mask = torch.bernoulli(torch.full((batch_size, self.max_seq_length, size), self.variational_dp_prob)).to(DEVICE) * scale
+        return mask

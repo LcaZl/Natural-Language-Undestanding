@@ -9,9 +9,9 @@ if __name__ == "__main__":
 
     train_dataset, dev_dataset, test_dataset, vocab_len, lang = load_dataset()
 
-    train_loader = DataLoader(train_dataset, batch_size=64, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),  shuffle=True)
-    dev_loader = DataLoader(dev_dataset, batch_size=32, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
-    test_loader = DataLoader(test_dataset, batch_size=32, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
+    train_loader = DataLoader(train_dataset, batch_size=256, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),  shuffle=True)
+    dev_loader = DataLoader(dev_dataset, batch_size=128, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
+    test_loader = DataLoader(test_dataset, batch_size=128, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
     
     criterion_train = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"])
     criterion_eval = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"], reduction='sum')
@@ -39,11 +39,11 @@ if __name__ == "__main__":
             'model_name':'LSTM',
             'weight_path':f'models_weight/LSTM_WeightTying.pth',
             'optmz_type':'Adam',
-            'optmz_learning_rate':0.001,
+            'optmz_learning_rate':1e-3,
             'output_dropout': 0.10,
             'embedding_dropout': 0.10,
-            'hidden_layer_size': 300,  
-            'embedded_layer_size': 300, 
+            'hidden_layer_size': 350,  
+            'embedded_layer_size': 350, 
             'weight_tying': True,
             'variational_dropout': False,
             **experiment_base
@@ -53,11 +53,11 @@ if __name__ == "__main__":
             'model_name':'LSTM',
             'weight_path':f'models_weight/LSTM_VarDropout.pth',
             'optmz_type':'Adam',
-            'optmz_learning_rate':0.001,
+            'optmz_learning_rate':1e-3,
             'output_dropout': 0.10,
             'embedding_dropout': 0.10,
-            'hidden_layer_size': 300, 
-            'embedded_layer_size': 300, 
+            'hidden_layer_size': 350, 
+            'embedded_layer_size': 350, 
             'weight_tying': True,
             'variational_dropout': True,
             **experiment_base
@@ -67,7 +67,7 @@ if __name__ == "__main__":
             'model_name':'LSTM',
             'weight_path':f'models_weight/LSTM_NTAvSGD.pth',
             'optmz_type':'NT-AvSGD',
-            'optmz_learning_rate':0.7,
+            'optmz_learning_rate':0.1,
             'output_dropout': 0.10,
             'embedding_dropout': 0.10,
             'hidden_layer_size': 350, 
