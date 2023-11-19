@@ -16,7 +16,19 @@ import math
 
 from utils import *
 from model import *
+def get_scores(reports, experiment_id):
+    df = pd.DataFrame(columns=['Experiment ID','Intent accuracy', 'Accuracy std.', 'Slot F1 score', 'F1 std.'])
 
+    slot_f1, intent_acc = [], []
+
+    for [run, slot_report, intent_report] in reports:
+        slot_f1.append(slot_report['total']['f'])
+        intent_acc.append(intent_report['accuracy'])
+        df.loc[len(df)] = [f'{experiment_id}_run_{run + 1}', slot_report['total']['f'], 0, intent_report['accuracy'], 0]
+    df.loc[len(df)] = [f'{experiment_id}_avg', np.mean(slot_f1), np.std(slot_f1), np.mean(intent_acc), np.std(intent_acc)]
+    df = df.round(4)
+
+    return df
 
 def init_model(parameters, model_state = None):
 

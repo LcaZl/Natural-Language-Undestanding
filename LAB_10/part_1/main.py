@@ -60,16 +60,20 @@ if __name__ == "__main__":
         }
     }
 
-    best_model, reports, losses = execute_experiment('Experiment_1', experiments['Experiment_1'])
-    best_model2, reports2, losses2 = execute_experiment('Experiment_2', experiments['Experiment_2'])
-    best_model3, reports3, losses3 = execute_experiment('Experiment_3', experiments['Experiment_3'])
+    best_model1, reports, losses1 = execute_experiment('Experiment_1', experiments['Experiment_1'])
+    scores = get_scores(reports, 'Experiment_1')
+    print('Best model for experiment 1:\n')
+    print(tabulate(scores, headers='keys', tablefmt='grid', showindex=True))
 
-    print('reports',reports)
-    print('losses',losses)
-    print('reports2',reports2)
-    print('losses2',losses2)
-    print('reports3',reports3)
-    print('losses3',losses3)
+    best_model2, reports, losses2 = execute_experiment('Experiment_2', experiments['Experiment_2'])
+    scores = pd.concat([scores, get_scores(reports, 'Experiment_2')], axis=0)
+
+    best_model3, reports, losses3 = execute_experiment('Experiment_3', experiments['Experiment_3'])
+    scores = pd.concat([scores, get_scores(reports, 'Experiment_3')], axis=0)
+
+    print('Experiments:\n')
+    print(tabulate(scores, headers='keys', tablefmt='grid', showindex=True))
+
 
 """
     cols = ['Id','Run','Accuracy','Accuracy Std','F score', 'F Std']

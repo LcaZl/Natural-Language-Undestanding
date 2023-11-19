@@ -29,14 +29,14 @@ if __name__ == "__main__":
             'num_intent_labels':len(lang.intent2id),
             'vocabulary_size':len(lang.tokenizer.vocab),
             'lang':lang,
-            'epochs':1,
+            'epochs':200,
             'patience':3,
             'clip':5,
-            'runs':1,
+            'runs':5,
             'learning_rate':5e-5,
             'dropout_probabilities':0.1,
-            'slot_loss_coefficient': 0.9,
-            'use_crf':True,
+            'slot_loss_coefficient': 1,
+            'use_crf':False,
             'criterion_slots' : nn.CrossEntropyLoss(ignore_index = PAD_TOKEN),
             'criterion_intents' : nn.CrossEntropyLoss() },
 
@@ -49,14 +49,14 @@ if __name__ == "__main__":
             'num_intent_labels':len(lang.intent2id),
             'vocabulary_size':len(lang.tokenizer.vocab),
             'lang':lang,
-            'epochs':1,
+            'epochs':200,
             'patience':3,
             'clip':5,
-            'runs':1,
+            'runs':5,
             'learning_rate':5e-5,
             'dropout_probabilities':0.1,
-            'slot_loss_coefficient': 0.9,
-            'use_crf':False,
+            'slot_loss_coefficient': 1,
+            'use_crf':True,
             'criterion_slots' : nn.CrossEntropyLoss(ignore_index = PAD_TOKEN),
             'criterion_intents' : nn.CrossEntropyLoss() }
             
@@ -65,12 +65,11 @@ if __name__ == "__main__":
     cols = ['Id','Run','Accuracy','Accuracy Std.','F-score', 'F-score Std.']
     scores = pd.DataFrame(columns = cols)
 
-    reports, best_model, losses = execute_experiment('Experiment_1', experiments['Experiment_1'])
-    reports2, best_model2, losses2 = execute_experiment('Experiment_2', experiments['Experiment_2'])
+    reports, best_model1, losses1 = execute_experiment('Experiment_1', experiments['Experiment_1'])
+    scores = get_scores(reports, 'Experiment_1')
 
-    print('reports',reports)
-    print('losses',losses)
-    print('reports2',reports2)
-    print('losses2',losses2)
+    reports, best_model2, losses2 = execute_experiment('Experiment_2', experiments['Experiment_2'])
+    scores = pd.concat([scores, get_scores(reports, 'Experiment_2')], axis=0)
 
-    print('\nExperiments comparison:\n')
+    print('Experiments:\n')
+    print(tabulate(scores, headers='keys', tablefmt='grid', showindex=True))
