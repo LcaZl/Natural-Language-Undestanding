@@ -54,7 +54,7 @@ def execute_experiments(experiments):
                         emb_dp_prob = experiment_parameters['embedding_dropout'],
                         weight_tying = experiment_parameters['weight_tying'],
                         variational_dropout = experiment_parameters['variational_dropout'],
-                        max_len = max(sents_len)).to(experiment_parameters['DEVICE'])
+                        max_len = max(sents_len)).to(DEVICE)
             
             model.apply(init_weights)
 
@@ -68,11 +68,7 @@ def execute_experiments(experiments):
                                             lr=experiment_parameters['optmz_learning_rate'])
                 
             # If weights of the model altready exists, don't train.
-            model_score = load_model_and_print_ppl(model, 
-                                                    experiment_parameters['weight_path'], 
-                                                    experiment_parameters['test_loader'], 
-                                                    experiment_parameters['criterion_eval'], 
-                                                    experiment_parameters['DEVICE'])
+            model_score = load_model_and_print_ppl(model, experiment_parameters)
             
             if model_score is None: # If the weight in specified folder doesn't exists
                 print(f'\nStart training ... \n')
@@ -222,7 +218,8 @@ def train_lm_nt_avsgd(parameters, model, optimizer):
         final_ppl,  _ = eval_loop(parameters['test_loader'], parameters['criterion_eval'], model)            
         return final_ppl
 
-def load_model_and_print_ppl(model, model_path, test_loader, criterion_eval, DEVICE):
+        
+def load_model_and_print_ppl(model, parameters):
     """
     Load a model and print its Perplexity (PPL) on the test dataset.
 
@@ -238,15 +235,15 @@ def load_model_and_print_ppl(model, model_path, test_loader, criterion_eval, DEV
     """
     
     # Check if the model file exists at the specified path.
-    if not os.path.exists(model_path):
-        print(f"\n-> No model file found at {model_path}.\n")
+    if not os.path.exists(parameters['weight_path']):
+        print(f"\n-> No model file found at {parameters['weight_path']}.\n")
         return None
     print(f'\n-> Weights founded! Loading ...\n')
 
-    model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+    model.load_state_dict(torch.load(parameters['weight_path'], map_location=DEVICE))
     model.to(DEVICE)
     model.eval()
-    ppl, _ = eval_loop(test_loader, criterion_eval, model)
+    ppl, _ = eval_loop(parameters['test_loader'], parameters['criterion_eval'], model)
     
     return ppl
 

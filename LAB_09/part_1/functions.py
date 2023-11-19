@@ -103,6 +103,7 @@ def train_lm(parameters, model, optimizer):
         best_ppl = math.inf
         best_model = None
         pbar = tqdm(range(1,parameters['n_epochs']))
+        P = parameters['patience']
         for epoch in pbar:
             loss = train_loop(parameters, optimizer, model)    
             
@@ -112,7 +113,7 @@ def train_lm(parameters, model, optimizer):
                 if  ppl_dev < best_ppl: # the lower, the better
                     best_ppl = ppl_dev
                     best_model = copy.deepcopy(model).to('cpu')
-                    P = parameters['patience']
+                    #P = parameters['patience']
                 else:
                     P -= 1
                     
@@ -148,7 +149,7 @@ def load_model_and_print_ppl(model, parameters):
     model.load_state_dict(torch.load(parameters['weight_path'], map_location=DEVICE))
     model.to(DEVICE)
     model.eval()
-    ppl, _ = eval_loop(parameters['test_loader'], parameters['criterion_eval'], model)
+    ppl, _ = eval_loop(parameters['test_loader'], parameters, model)
     
     return ppl
 
