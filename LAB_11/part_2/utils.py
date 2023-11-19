@@ -88,12 +88,8 @@ def process_raw_data(dataset):
                 pol_tags.append((aspect_start_index, len(words_tagged) - 1, pol_tag))
 
             tokens = text
-            lemmatizer = WordNetLemmatizer()
-            stop_words = set(stopwords.words('english'))
             tokens = [word.lower() for word in tokens if word.isalpha()]
-            tokens = [word for word in tokens if word not in stop_words]
             tokens = [str(w2n.word_to_num(token)) if token in w2n.american_number_system else token for token in tokens]
-            tokens = [lemmatizer.lemmatize(word) for word in tokens]
 
             new_dataset.append((' '.join(tokens), aspect_tags, pol_tags))
 

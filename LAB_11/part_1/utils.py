@@ -36,6 +36,7 @@ def preprocess(dataset, label, mark_neg = True):
 
     def chunk_sequence(sequence):
         return [sequence[i:i + BERT_MAX_LEN] for i in range(0, len(sequence), BERT_MAX_LEN)]
+    maxlen = 0
 
     for tokens in tqdm(dataset, desc = 'Preprocessing dataset'):
         text = ' '.join(tokens)
@@ -52,17 +53,15 @@ def preprocess(dataset, label, mark_neg = True):
             vscore = 'VPOS'  # Molto positivo
         """
         
-        lemmatizer = WordNetLemmatizer()
-        stop_words = set(stopwords.words('english'))
         tokens = [word.lower() for word in tokens if word.isalpha()]
-        tokens = [word for word in tokens if word not in stop_words]
         tokens = [str(w2n.word_to_num(token)) if token in w2n.american_number_system else token for token in tokens]
-        tokens = [lemmatizer.lemmatize(word) for word in tokens]
 
         if mark_neg:
             tokens = mark_negation(tokens)
 
         if len(tokens) != 0:
+            if len(tokens) > maxlen:
+                maxlen = len(tokens)
             tokenized_sent = TOKENIZER(' '.join(tokens), truncation=False, padding=False)
             encoded_sentence = tokenized_sent['input_ids']
             attention_mask = tokenized_sent['attention_mask']
@@ -77,6 +76,7 @@ def preprocess(dataset, label, mark_neg = True):
             else:
                 new_dataset.append((encoded_sentence, attention_mask, label))
         
+    print(maxlen)
     return new_dataset
 
 def filter_movie_reviews(filter):
