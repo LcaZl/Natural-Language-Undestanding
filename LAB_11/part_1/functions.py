@@ -61,10 +61,13 @@ def init_model(parameters, model_state = None):
     model = SUBJ_Model(
         output_size=parameters['output_size'],
         dropout=parameters['dropout']
-    ).to(DEVICE)
+    )
 
     if model_state:
         model.load_state_dict(model_state)
+    elif torch.cuda.device_count() > 1:
+        model = torch.nn.DataParallel(model)
+    model.to(DEVICE)
 
     if parameters['optimizer'] == 'SGD':
         optimizer = optim.SGD(model.parameters(), 

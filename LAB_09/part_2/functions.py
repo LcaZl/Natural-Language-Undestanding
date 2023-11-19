@@ -92,29 +92,19 @@ def train_lm(parameters, model, optimizer):
         Train a language model
 
         Parameters:
-        - save_path (str): path where the model with best performance is saved
-        - n_epochs (int): maximum number of epochs to train the model
-        - patience (int): number of epochs to wait for improvement before stopping training
+        - parameters (dict): parameters for the procedure
         - model (torch.nn.Module): PyTorch model to train
         - optimizer (torch.optim.Optimizer): optimizer to use during training
-        - criterion_train (torch.nn.Module): loss function used during training
-        - criterion_eval (torch.nn.Module): loss function used during evaluation
-        - train_loader (torch.utils.data.DataLoader): dataLoader for the training set
-        - dev_loader (torch.utils.data.DataLoader): dataLoader for the development set
-        - test_loader (torch.utils.data.DataLoader): dataLoader for the test set
-        - DEVICE (str or torch.DEVICE): DEVICE, "cpu" or "cuda"
-        - clip (float): value to clip gradients during training
+
 
         Returns:
         - final_ppl (float): perplexity of the best model on training set
         """  
         best_ppl = math.inf
         best_model = None
-        pbar = tqdm(range(1,parameters['n_epochs']))
+        pbar = tqdm(range(0,parameters['n_epochs']))
 
         for epoch in pbar:
-            if model.variational_dropout:
-                model.reset_vd_mask()
 
             loss = train_loop(parameters['train_loader'], optimizer, parameters['criterion_train'], model, parameters['clip'])    
             
@@ -128,7 +118,6 @@ def train_lm(parameters, model, optimizer):
                     best_ppl = ppl_dev
                     best_model = copy.deepcopy(model).to('cpu')
                     P = parameters['patience']
-
                 else:
                     P -= 1
                     
@@ -150,24 +139,13 @@ def average_weights(weight_list):
     return avg_weights
 
 def train_lm_nt_avsgd(parameters, model, optimizer):
-        
         """
         Train a language model using non monotonic averaged SGD.
 
         Parameters:
-        - save_path (str): path where the model with best performance is saved
-        - n_epochs (int): maximum number of epochs to train the model
-        - patience (int): number of epochs to wait for improvement before stopping training
+        - parameters (dict): parameters for the procedure
         - model (torch.nn.Module): PyTorch model to train
         - optimizer (torch.optim.Optimizer): optimizer to use during training
-        - criterion_train (torch.nn.Module): loss function used during training
-        - criterion_eval (torch.nn.Module): loss function used during evaluation
-        - train_loader (torch.utils.data.DataLoader): dataLoader for the training set
-        - dev_loader (torch.utils.data.DataLoader): dataLoader for the development set
-        - test_loader (torch.utils.data.DataLoader): dataLoader for the test set
-        - DEVICE (str or torch.DEVICE): DEVICE, "cpu" or "cuda"
-        - clip (float): value to clip gradients during training
-        - L 
 
         Returns:
         - final_ppl (float): perplexity of the best model on training set
@@ -179,7 +157,7 @@ def train_lm_nt_avsgd(parameters, model, optimizer):
         t = 0
         best_ppl = math.inf
 
-        pbar = tqdm(range(parameters['n_epochs']))  # Inizio da 0
+        pbar = tqdm(range(0, parameters['n_epochs']))  # Inizio da 0
         for epoch_K in pbar:
 
             if model.variational_dropout:
@@ -198,7 +176,7 @@ def train_lm_nt_avsgd(parameters, model, optimizer):
 
                 logs.append(PPL)
                 t = t + 1
-
+            
                 if PPL < best_ppl:
                     best_ppl = PPL
                     P = parameters['patience']
@@ -208,10 +186,14 @@ def train_lm_nt_avsgd(parameters, model, optimizer):
                 if P <= 0:
                     break
             else:
-                saved_weights.append(copy.deepcopy(model.state_dict()))
+                if T != 0:
+                    saved_weights.append(copy.deepcopy(model.state_dict()))
 
         # Average the saved weights to implement NT-AvSGD
-        avg_weights = average_weights(saved_weights)   
+        if T != 0:
+            avg_weights = average_weights(saved_weights[T:])  # Average only weights after T
+        else:
+            avg_weights = average_weights(saved_weights)  # If T was never set, average all
         model.load_state_dict(avg_weights)
         model.to(DEVICE)
         torch.save(model.state_dict(), parameters['weight_path'])
@@ -247,13 +229,15 @@ def load_model_and_print_ppl(model, parameters):
     
     return ppl
 
-## from LAB_09
 def train_loop(data, optimizer, criterion, model, clip=5):
     model.train()
     loss_array = []
     number_of_tokens = []
     
     for sample in data:
+        if model.variational_dropout:
+                model.reset_vd_mask()
+
         optimizer.zero_grad() # Zeroing the gradient
         output = model(sample['source'])
         loss = criterion(output, sample['target'])
@@ -274,6 +258,8 @@ def eval_loop(data, eval_criterion, model):
     # softmax = nn.Softmax(dim=1) # Use Softmax if you need the actual probability
     with torch.no_grad(): # It used to avoid the creation of computational graph
         for sample in data:
+            if model.variational_dropout:
+                model.reset_vd_mask()
             output = model(sample['source'])
             loss = eval_criterion(output, sample['target'])
             loss_array.append(loss.item())
