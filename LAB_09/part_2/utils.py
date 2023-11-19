@@ -3,6 +3,7 @@
 import torch
 import torch.utils.data as data
 import os
+DEVICE = 'cuda:0'
 
 
 def load_dataset():
@@ -136,7 +137,6 @@ class PennTreeBank (data.Dataset):
         return res
 
 def collate_fn(data, pad_token):
-    device = 'cuda:0'
 
     def merge(sequences):
         '''
@@ -163,7 +163,7 @@ def collate_fn(data, pad_token):
     source, _ = merge(new_item["source"])
     target, lengths = merge(new_item["target"])
     
-    new_item["source"] = source.to(device)
-    new_item["target"] = target.to(device)
+    new_item["source"] = source.to(DEVICE)
+    new_item["target"] = target.to(DEVICE)
     new_item["number_tokens"] = sum(lengths)
     return new_item

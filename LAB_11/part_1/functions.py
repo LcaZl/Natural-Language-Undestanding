@@ -117,7 +117,7 @@ def train_lm(parameters):
                     if P <= 0:
                         break
 
-                pbar.set_description(f'Run {r} - Epoch {epoch} - L: {round(np.mean(losses), 3)} - S:{score} - Report:{report}')
+                pbar.set_description(f'Run {r} - Epoch {epoch} - L: {round(np.mean(train_losses[loss_idx]), 3)} - S:{score} - Report:{report}')
 
             _, score, report = evaluation(model, parameters, parameters['test_loader'])
 

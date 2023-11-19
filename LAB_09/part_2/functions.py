@@ -54,7 +54,7 @@ def execute_experiments(experiments):
                         emb_dp_prob = experiment_parameters['embedding_dropout'],
                         weight_tying = experiment_parameters['weight_tying'],
                         variational_dropout = experiment_parameters['variational_dropout'],
-                        max_len = max(sents_len)).to(experiment_parameters['device'])
+                        max_len = max(sents_len)).to(experiment_parameters['DEVICE'])
             
             model.apply(init_weights)
 
@@ -72,41 +72,15 @@ def execute_experiments(experiments):
                                                     experiment_parameters['weight_path'], 
                                                     experiment_parameters['test_loader'], 
                                                     experiment_parameters['criterion_eval'], 
-                                                    experiment_parameters['device'])
+                                                    experiment_parameters['DEVICE'])
             
             if model_score is None: # If the weight in specified folder doesn't exists
                 print(f'\nStart training ... \n')
 
                 if experiment_parameters['optmz_type'] == 'NT-AvSGD':
-                    model_score = train_lm_nt_avsgd(
-                            experiment_parameters['weight_path'],
-                            experiment_parameters['n_epochs'], 
-                            experiment_parameters['patience'], 
-                            model, 
-                            optimizer, 
-                            experiment_parameters['criterion_train'], 
-                            experiment_parameters['criterion_eval'], 
-                            experiment_parameters['train_loader'], 
-                            experiment_parameters['dev_loader'], 
-                            experiment_parameters['test_loader'], 
-                            experiment_parameters['device'], 
-                            experiment_parameters['clip'],
-                            experiment_parameters['logging_interval'],
-                            experiment_parameters['non_monotonic_interval'])
+                    model_score = train_lm_nt_avsgd(experiment_parameters, model,  optimizer)
                 else:
-                    model_score = train_lm(
-                            experiment_parameters['weight_path'],
-                            experiment_parameters['n_epochs'], 
-                            experiment_parameters['patience'], 
-                            model, 
-                            optimizer, 
-                            experiment_parameters['criterion_train'], 
-                            experiment_parameters['criterion_eval'], 
-                            experiment_parameters['train_loader'], 
-                            experiment_parameters['dev_loader'], 
-                            experiment_parameters['test_loader'], 
-                            experiment_parameters['device'], 
-                            experiment_parameters['clip'])
+                    model_score = train_lm(experiment_parameters, model, optimizer)
             
             experiment_result = pd.DataFrame(columns=cols, 
                                  data = [[experiment_id, experiment_parameters['model_name'], model_score]])
@@ -117,8 +91,7 @@ def execute_experiments(experiments):
             
         return scores
 
-def train_lm(save_path, n_epochs, patience, model, optimizer, criterion_train, criterion_eval, train_loader, dev_loader, test_loader, device, 
-             clip):
+def train_lm(parameters, model, optimizer):
         """
         Train a language model
 
@@ -133,7 +106,7 @@ def train_lm(save_path, n_epochs, patience, model, optimizer, criterion_train, c
         - train_loader (torch.utils.data.DataLoader): dataLoader for the training set
         - dev_loader (torch.utils.data.DataLoader): dataLoader for the development set
         - test_loader (torch.utils.data.DataLoader): dataLoader for the test set
-        - device (str or torch.device): device, "cpu" or "cuda"
+        - DEVICE (str or torch.DEVICE): DEVICE, "cpu" or "cuda"
         - clip (float): value to clip gradients during training
 
         Returns:
@@ -141,24 +114,24 @@ def train_lm(save_path, n_epochs, patience, model, optimizer, criterion_train, c
         """  
         best_ppl = math.inf
         best_model = None
-        pbar = tqdm(range(1,n_epochs))
+        pbar = tqdm(range(1,parameters['n_epochs']))
 
         for epoch in pbar:
             if model.variational_dropout:
                 model.reset_vd_mask()
 
-            loss = train_loop(train_loader, optimizer, criterion_train, model, clip)    
+            loss = train_loop(parameters['train_loader'], optimizer, parameters['criterion_train'], model, parameters['clip'])    
             
             if epoch % 1 == 0:
                 
-                ppl_dev, loss_dev = eval_loop(dev_loader, criterion_eval, model)
+                ppl_dev, loss_dev = eval_loop(parameters['dev_loader'], parameters['criterion_eval'], model)
                 pbar.set_description("PPL: %f" % ppl_dev)
 
                 if  ppl_dev < best_ppl:  
 
                     best_ppl = ppl_dev
                     best_model = copy.deepcopy(model).to('cpu')
-                    P = patience
+                    P = parameters['patience']
 
                 else:
                     P -= 1
@@ -166,9 +139,9 @@ def train_lm(save_path, n_epochs, patience, model, optimizer, criterion_train, c
                 if P <= 0: # Early stopping with patience
                     break # Not nice but it keeps the code clean 
 
-        best_model.to(device)
-        torch.save(best_model.state_dict(), save_path)
-        final_ppl,  _ = eval_loop(test_loader, criterion_eval, best_model)            
+        best_model.to(DEVICE)
+        torch.save(best_model.state_dict(), parameters['weight_path'])
+        final_ppl,  _ = eval_loop(parameters['test_loader'], parameters['criterion_eval'], best_model)            
         return final_ppl
 
 def average_weights(weight_list):
@@ -180,8 +153,7 @@ def average_weights(weight_list):
         avg_weights[key] = sum([weights[key] for weights in weight_list]) / len(weight_list)
     return avg_weights
 
-def train_lm_nt_avsgd(save_path, n_epochs, patience, model, optimizer, criterion_train, criterion_eval, train_loader, dev_loader, test_loader, device, 
-             clip, L, n):
+def train_lm_nt_avsgd(parameters, model, optimizer):
         
         """
         Train a language model using non monotonic averaged SGD.
@@ -197,7 +169,7 @@ def train_lm_nt_avsgd(save_path, n_epochs, patience, model, optimizer, criterion
         - train_loader (torch.utils.data.DataLoader): dataLoader for the training set
         - dev_loader (torch.utils.data.DataLoader): dataLoader for the development set
         - test_loader (torch.utils.data.DataLoader): dataLoader for the test set
-        - device (str or torch.device): device, "cpu" or "cuda"
+        - DEVICE (str or torch.DEVICE): DEVICE, "cpu" or "cuda"
         - clip (float): value to clip gradients during training
         - L 
 
@@ -211,21 +183,21 @@ def train_lm_nt_avsgd(save_path, n_epochs, patience, model, optimizer, criterion
         t = 0
         best_ppl = math.inf
 
-        pbar = tqdm(range(n_epochs))  # Inizio da 0
+        pbar = tqdm(range(parameters['n_epochs']))  # Inizio da 0
         for epoch_K in pbar:
 
             if model.variational_dropout:
                 model.reset_vd_mask()
                 
-            loss = train_loop(train_loader, optimizer, criterion_train, model, clip)    
+            loss = train_loop(parameters['train_loader'], optimizer, parameters['criterion_train'], model, parameters['clip'])    
                         
-            if epoch_K % L == 0 and T == 0:  # Controlla se questa condizione è mai vera                      
+            if epoch_K % parameters['logging_interval'] == 0 and T == 0:  # Controlla se questa condizione è mai vera                      
                 # Evaluate the model on the validation set
-                PPL, _ = eval_loop(dev_loader, criterion_eval, model)
+                PPL, _ = eval_loop(parameters['dev_loader'], parameters['criterion_eval'], model)
                 pbar.set_description("PPL: %f" % PPL)
 
                 # If the current PPL is better than the best PPL
-                if t > n and PPL > min(logs[:t-n+1]): 
+                if t > parameters['non_monotonic_interval'] and PPL > min(logs[:t-parameters['non_monotonic_interval']+1]): 
                     T = epoch_K
 
                 logs.append(PPL)
@@ -233,11 +205,11 @@ def train_lm_nt_avsgd(save_path, n_epochs, patience, model, optimizer, criterion
 
                 if PPL < best_ppl:
                     best_ppl = PPL
-                    P = patience
+                    P = parameters['patience']
                 else:
                     P -= 1
 
-                if patience <= 0:
+                if P <= 0:
                     break
             else:
                 saved_weights.append(copy.deepcopy(model.state_dict()))
@@ -245,12 +217,12 @@ def train_lm_nt_avsgd(save_path, n_epochs, patience, model, optimizer, criterion
         # Average the saved weights to implement NT-AvSGD
         avg_weights = average_weights(saved_weights)   
         model.load_state_dict(avg_weights)
-        model.to(device)
-        torch.save(model.state_dict(), save_path)
-        final_ppl,  _ = eval_loop(test_loader, criterion_eval, model)            
+        model.to(DEVICE)
+        torch.save(model.state_dict(), parameters['weight_path'])
+        final_ppl,  _ = eval_loop(parameters['test_loader'], parameters['criterion_eval'], model)            
         return final_ppl
 
-def load_model_and_print_ppl(model, model_path, test_loader, criterion_eval, device):
+def load_model_and_print_ppl(model, model_path, test_loader, criterion_eval, DEVICE):
     """
     Load a model and print its Perplexity (PPL) on the test dataset.
 
@@ -259,7 +231,7 @@ def load_model_and_print_ppl(model, model_path, test_loader, criterion_eval, dev
     - model_path (str): path to the file containing the saved model parameters
     - test_loader (torch.utils.data.DataLoader): dataLoader for the test set
     - criterion_eval (torch.nn.Module): loss function used during evaluation
-    - device (str or torch.device): device
+    - DEVICE (str or torch.DEVICE): DEVICE
     
     Returns:
     - ppl (float): perplexity of the model
@@ -271,8 +243,8 @@ def load_model_and_print_ppl(model, model_path, test_loader, criterion_eval, dev
         return None
     print(f'\n-> Weights founded! Loading ...\n')
 
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.to(device)
+    model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+    model.to(DEVICE)
     model.eval()
     ppl, _ = eval_loop(test_loader, criterion_eval, model)
     

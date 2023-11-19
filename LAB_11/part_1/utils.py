@@ -49,9 +49,9 @@ def preprocess(dataset, label, mark_neg = True):
             vscore = 'VPOS'  # Molto positivo
         """
         
-        stop_words = set(stopwords.words('english'))
-        tokens = [word.lower() for word in tokens if word.isalpha()]
-        tokens = [word for word in tokens if word not in stop_words]
+        #stop_words = set(stopwords.words('english'))
+        #tokens = [word.lower() for word in tokens if word.isalpha()]
+        #tokens = [word for word in tokens if word not in stop_words]
 
         if mark_neg:
             tokens = mark_negation(tokens)
