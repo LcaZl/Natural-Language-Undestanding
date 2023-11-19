@@ -10,7 +10,7 @@ if __name__ == "__main__":
             'clip':5,
             'epochs': 200,
             'n_splits':10,
-            'runs':3,
+            'runs':5,
             'optimizer':'Adam',
             'dropout': 0.1,
             'learning_rate': 5e-5,

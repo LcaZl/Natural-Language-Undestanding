@@ -53,7 +53,7 @@ def train_model(parameters):
         saved_data = torch.load(model_filename)
         print(f'Model founded. Parameters:', saved_data['parameters'])
         model, _ = init_model(parameters, saved_data['model_state'])
-        reports = saved_data['report']
+        reports = saved_data['reports']
         best_report = saved_data['best_report']
         #losses = saved_data['losses']
     else:
@@ -67,7 +67,7 @@ def train_model(parameters):
 
         data_to_save = {
             'model_state': model.state_dict(),
-            'report': reports,
+            'reports': reports,
             'best_report': best_report,
             'parameters': best_params,
             'losses':losses
