@@ -62,8 +62,6 @@ if __name__ == "__main__":
 
     best_model1, reports, losses1 = execute_experiment('Experiment_1', experiments['Experiment_1'])
     scores = get_scores(reports, 'Experiment_1')
-    print('Best model for experiment 1:\n')
-    print(tabulate(scores, headers='keys', tablefmt='grid', showindex=True))
 
     best_model2, reports, losses2 = execute_experiment('Experiment_2', experiments['Experiment_2'])
     scores = pd.concat([scores, get_scores(reports, 'Experiment_2')], axis=0)
