@@ -167,8 +167,6 @@ class IntentsAndSlots(data.Dataset):
 
         return aligned_slots
 
-
-    
     def __len__(self):
         return len(self.utt_ids)
 

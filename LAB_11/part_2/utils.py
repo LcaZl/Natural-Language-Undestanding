@@ -15,7 +15,8 @@ from nltk.sentiment.util import mark_negation
 from transformers import BertTokenizer
 from nltk.stem import WordNetLemmatizer
 import math
-
+from nltk.stem import WordNetLemmatizer
+from word2number import w2n
 nltk.download('vader_lexicon')
 nltk.download('sentiwordnet')
 import torch
@@ -86,7 +87,15 @@ def process_raw_data(dataset):
                 aspect_tags[-1] = 'S'
                 pol_tags.append((aspect_start_index, len(words_tagged) - 1, pol_tag))
 
-            new_dataset.append((' '.join(text), aspect_tags, pol_tags))
+            tokens = text
+            lemmatizer = WordNetLemmatizer()
+            stop_words = set(stopwords.words('english'))
+            tokens = [word.lower() for word in tokens if word.isalpha()]
+            tokens = [word for word in tokens if word not in stop_words]
+            tokens = [str(w2n.word_to_num(token)) if token in w2n.american_number_system else token for token in tokens]
+            tokens = [lemmatizer.lemmatize(word) for word in tokens]
+
+            new_dataset.append((' '.join(tokens), aspect_tags, pol_tags))
 
             if INFO_ENABLED:
                 print('- Raw       :', words_tagged)

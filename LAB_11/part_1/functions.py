@@ -105,7 +105,7 @@ def train_lm(parameters):
                 losses = train_loop(train_loader, optimizer, model, parameters)
                 train_losses[loss_idx].extend(losses)
 
-                if epoch % 2:
+                if epoch % 1 == 0:
                     losses, score, report = evaluation(model, parameters, dev_loader)
                     dev_losses[loss_idx].extend(losses)
 

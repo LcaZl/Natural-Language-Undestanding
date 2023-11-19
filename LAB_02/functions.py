@@ -282,7 +282,8 @@ def normalize_document(doc):
     words = [str(token).replace('\n', ' ') for token in words]
     
     # Remove punctuation
-    words = [''.join(c for c in str(token) if c not in string.punctuation) for token in words]        
+    words = [''.join(c for c in str(token) if c not in string.punctuation) for token in words]     
+       
     # Number normalization (number words to numbers)
     words = [str(w2n.word_to_num(token)) if str(token) in w2n.american_number_system else token for token in words]
     

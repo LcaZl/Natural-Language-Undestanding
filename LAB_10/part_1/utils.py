@@ -54,6 +54,8 @@ def load_dataset():
                                                                 # the cutoff
     corpus = train_raw + dev_raw + test_raw # We do not wat unk labels,
                                             # however this depends on the research purpose
+
+    
     slots = set(sum([line['slots'].split() for line in corpus],[]))
     intents = set([line['intent'] for line in corpus])
 

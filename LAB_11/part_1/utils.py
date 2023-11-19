@@ -2,6 +2,8 @@ import nltk
 import torch
 import torch.utils.data as data
 import math
+from nltk.stem import WordNetLemmatizer
+from word2number import w2n
 
 from nltk.sentiment.util import mark_negation
 from nltk.lm.preprocessing import flatten
@@ -16,6 +18,7 @@ nltk.download('stopwords')
 nltk.download('punkt')
 nltk.download('movie_reviews')
 nltk.download('vader_lexicon')
+nltk.download('wordnet')
 from nltk.corpus import subjectivity
 from nltk.corpus import movie_reviews
 from nltk.corpus import stopwords
@@ -49,9 +52,12 @@ def preprocess(dataset, label, mark_neg = True):
             vscore = 'VPOS'  # Molto positivo
         """
         
-        #stop_words = set(stopwords.words('english'))
-        #tokens = [word.lower() for word in tokens if word.isalpha()]
-        #tokens = [word for word in tokens if word not in stop_words]
+        lemmatizer = WordNetLemmatizer()
+        stop_words = set(stopwords.words('english'))
+        tokens = [word.lower() for word in tokens if word.isalpha()]
+        tokens = [word for word in tokens if word not in stop_words]
+        tokens = [str(w2n.word_to_num(token)) if token in w2n.american_number_system else token for token in tokens]
+        tokens = [lemmatizer.lemmatize(word) for word in tokens]
 
         if mark_neg:
             tokens = mark_negation(tokens)
@@ -62,6 +68,7 @@ def preprocess(dataset, label, mark_neg = True):
             attention_mask = tokenized_sent['attention_mask']
 
             if len(encoded_sentence) > BERT_MAX_LEN:
+                print('longer sent')
                 chunked_sentences = chunk_sequence(encoded_sentence)
                 chunked_attention_masks = chunk_sequence(attention_mask)
 
