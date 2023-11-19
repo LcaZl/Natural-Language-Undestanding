@@ -1,10 +1,10 @@
 import torch.nn as nn
 
-class LM_(nn.Module):
+class LangModel(nn.Module):
     def __init__(self, nn_type, emb_size, hidden_size, output_size, pad_index=0, 
                  out_dp_prob  = 0, emb_dp_prob = 0, n_layers=1):
 
-        super(LM_, self).__init__()
+        super(LangModel, self).__init__()
         
         # Token ids to vectors
         self.embedding = nn.Embedding(output_size, emb_size, padding_idx=pad_index)
