@@ -154,6 +154,7 @@ def train_LangModelnt_avsgd(parameters, model, optimizer):
         logs = []
         saved_weights = []
         T = 0
+        P = 3
         t = 0
         best_ppl = math.inf
 
@@ -187,10 +188,13 @@ def train_LangModelnt_avsgd(parameters, model, optimizer):
                     saved_weights.append(copy.deepcopy(model.state_dict()))
 
         # Average the saved weights to implement NT-AvSGD
-        if T != 0:
+        if T != 0 and len(saved_weights) > 0:
             avg_weights = average_weights(saved_weights[T:])  # Average only weights after T
-        else:
+        elif len(saved_weights) > 0:
             avg_weights = average_weights(saved_weights)  # If T was never set, average all
+        else:
+            # Gestisci il caso in cui non ci sono pesi salvati
+            avg_weights = model.state
         model.load_state_dict(avg_weights)
         model.to(DEVICE)
         torch.save(model.state_dict(), parameters['weight_path'])
