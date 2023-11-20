@@ -51,7 +51,7 @@ def train_model(parameters):
 
     if os.path.exists(model_filename):
         saved_data = torch.load(model_filename)
-        print(f'Model founded. Parameters:', saved_data['parameters'])
+        print(f'Model founded. \nParameters:', saved_data['parameters'])
         model, _ = init_model(parameters, saved_data['model_state'])
         reports = saved_data['reports']
         best_report = saved_data['best_report']
@@ -71,10 +71,7 @@ def train_model(parameters):
         }
         torch.save(data_to_save, model_filename)
 
-    cols = ['Fold', 'Run', 'ot_precision', 'ot_recall', 'ot_f1', 'ts_macro_f1', 'ts_micro_p', 'ts_micro_r', 'ts_micro_f1']
-    training_report = pd.DataFrame(reports, columns=cols).set_index('Fold')
-
-    return model, training_report, best_report
+    return model, reports, best_report
 
 def train_lm(parameters):
     dev_losses = {}
