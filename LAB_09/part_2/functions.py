@@ -103,7 +103,6 @@ def train_lm(parameters, model, optimizer):
         best_model = None
         pbar = tqdm(range(0,parameters['n_epochs']))
 
-
         for epoch in pbar:
 
             loss = train_loop(parameters['train_loader'], optimizer, parameters['criterion_train'], model, parameters['clip'])    
@@ -150,6 +149,7 @@ def train_LangModelnt_avsgd(parameters, model, optimizer):
         Returns:
         - final_ppl (float): perplexity of the best model on training set
         """  
+
         # Initialize a variable to store the best perplexity (PPL) value
         logs = []
         saved_weights = []
@@ -241,6 +241,7 @@ def train_loop(data, optimizer, criterion, model, clip=5):
         loss_array.append(loss.item() * sample["number_tokens"])
         number_of_tokens.append(sample["number_tokens"])
         loss.backward() # Compute the gradient, deleting the computational graph
+        
         # clip the gradient to avoid explosioning gradients
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip)  
         optimizer.step() # Update the weights
@@ -252,7 +253,7 @@ def eval_loop(data, eval_criterion, model):
     loss_to_return = []
     loss_array = []
     number_of_tokens = []
-    # softmax = nn.Softmax(dim=1) # Use Softmax if you need the actual probability
+
     with torch.no_grad(): # It used to avoid the creation of computational graph
         for sample in data:
             if model.variational_dropout:
