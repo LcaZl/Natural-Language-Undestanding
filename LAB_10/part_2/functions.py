@@ -109,6 +109,7 @@ def train_lm(parameters):
                 report_slot, report_intent, losses = eval_loop(parameters['dev_loader'], model, parameters)
                 dev_losses[loss_idx].extend(losses)
                 score = (report_slot['total']['f'] + report_intent['accuracy']) / 2
+                report = (round(report_slot['total']['f'],3), round(report_intent['accuracy'],3))
 
                 if score > S:
                     S = score
@@ -118,7 +119,7 @@ def train_lm(parameters):
                 if P <= 0: # Early stopping with patience
                     break # Not nice but it keeps the code clean
 
-                pbar.set_description(f'Run {r} - Epoch {epoch} - L: {round(np.mean(losses), 3)} - S:{score} - Report:{report}')
+            pbar.set_description(f'Run {r} - Epoch {epoch} - L: {round(np.mean(losses), 3)} - S:{round(score, 3)} - Report:{report}')
 
         report_slot, report_intent, _ = eval_loop(parameters['test_loader'], model, parameters)
         report = (r, report_slot, report_intent)
