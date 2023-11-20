@@ -44,7 +44,6 @@ def execute_experiments(experiments):
             sents_len = [experiment_parameters['train_max_len'], experiment_parameters['dev_max_len'], experiment_parameters['test_max_len']]
             # Experiment also with a smaller or bigger model by changing hid and emb sizes 
             model = LangModel(
-                        nn_type = experiment_parameters['model_name'],
                         emb_size = experiment_parameters['embedded_layer_size'], 
                         hidden_size = experiment_parameters['hidden_layer_size'], 
                         output_size = experiment_parameters['vocab_len'], 
@@ -53,6 +52,7 @@ def execute_experiments(experiments):
                         emb_dp_prob = experiment_parameters['embedding_dropout'],
                         weight_tying = experiment_parameters['weight_tying'],
                         variational_dropout = experiment_parameters['variational_dropout'],
+                        n_layers=experiment_parameters['layers'],
                         max_len = max(sents_len)).to(DEVICE)
             
             model.apply(init_weights)

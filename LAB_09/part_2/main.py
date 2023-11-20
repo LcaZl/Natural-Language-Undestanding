@@ -9,7 +9,7 @@ if __name__ == "__main__":
 
     train_dataset, dev_dataset, test_dataset, vocab_len, lang = load_dataset()
 
-    train_loader = DataLoader(train_dataset, batch_size=256, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),  shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=128, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),  shuffle=True)
     dev_loader = DataLoader(dev_dataset, batch_size=128, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
     test_loader = DataLoader(test_dataset, batch_size=128, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
     
@@ -34,10 +34,24 @@ if __name__ == "__main__":
     }
 
     experiments = {
+        'Experiment_0': {
+            'model_name':'LSTM',
+            'weight_path':f'models_weight/LSTM.pth',
+            'optmz_type':'Adam',
+            'optmz_learning_rate': 0.001,
+            'output_dropout': 0.10,
+            'embedding_dropout': 0.10,
+            'hidden_layer_size': 400,  
+            'embedded_layer_size': 400, 
+            'weight_tying': False,
+            'variational_dropout': False,
+            'layers':3,
+            **experiment_base
+        }, 
 
         'Experiment_1': {
             'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM_WeightTying.pth',
+            'weight_path':f'models_weight/LSTM_WT.pth',
             'optmz_type':'Adam',
             'optmz_learning_rate': 0.001,
             'output_dropout': 0.10,
@@ -51,7 +65,21 @@ if __name__ == "__main__":
 
         'Experiment_2': {
             'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM_VarDropout.pth',
+            'weight_path':f'models_weight/LSTM_VD.pth',
+            'optmz_type':'Adam',
+            'optmz_learning_rate': 0.001,
+            'output_dropout': 0.10,
+            'embedding_dropout': 0.10,
+            'hidden_layer_size': 400, 
+            'embedded_layer_size': 400, 
+            'weight_tying': False,
+            'variational_dropout': True,
+            **experiment_base
+        },
+
+        'Experiment_3': {
+            'model_name':'LSTM',
+            'weight_path':f'models_weight/LSTM_WTVD.pth',
             'optmz_type':'Adam',
             'optmz_learning_rate': 0.001,
             'output_dropout': 0.10,
@@ -63,9 +91,9 @@ if __name__ == "__main__":
             **experiment_base
         },
 
-        'Experiment_3': {
+        'Experiment_4': {
             'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM_NTAvSGD.pth',
+            'weight_path':f'models_weight/LSTM_NTAvSGD_WT.pth',
             'optmz_type':'NT-AvSGD',
             'optmz_learning_rate':0.7,
             'output_dropout': 0.10,
@@ -73,6 +101,38 @@ if __name__ == "__main__":
             'hidden_layer_size': 400, 
             'embedded_layer_size': 400,
             'weight_tying': True,
+            'variational_dropout': False,
+            'logging_interval': 1,
+            'non_monotonic_interval': 5,
+            **experiment_base
+        },
+
+        'Experiment_5': {
+            'model_name':'LSTM',
+            'weight_path':f'models_weight/LSTM_NTAvSGD_VD.pth',
+            'optmz_type':'NT-AvSGD',
+            'optmz_learning_rate':0.7,
+            'output_dropout': 0.10,
+            'embedding_dropout': 0.10,
+            'hidden_layer_size': 400, 
+            'embedded_layer_size': 400,
+            'weight_tying': False,
+            'variational_dropout': True,
+            'logging_interval': 1,
+            'non_monotonic_interval': 5,
+            **experiment_base
+        },
+
+        'Experiment_6': {
+            'model_name':'LSTM',
+            'weight_path':f'models_weight/LSTM_NTAvSGD_WTVD.pth',
+            'optmz_type':'NT-AvSGD',
+            'optmz_learning_rate':0.7,
+            'output_dropout': 0.10,
+            'embedding_dropout': 0.10,
+            'hidden_layer_size': 400, 
+            'embedded_layer_size': 400,
+            'weight_tying': False,
             'variational_dropout': True,
             'logging_interval': 1,
             'non_monotonic_interval': 5,

@@ -3,7 +3,7 @@ import torch
 from utils import *
 
 class LangModel(nn.Module):
-    def __init__(self, nn_type, emb_size, hidden_size, output_size, pad_index=0, 
+    def __init__(self, emb_size, hidden_size, output_size, pad_index=0, 
                  out_dp_prob=0, emb_dp_prob=0, variational_dp_prob=0.5, # Variational dropout probability
                  n_layers=1, weight_tying=False, variational_dropout=False, max_len=100):
         super(LangModel, self).__init__()
@@ -11,10 +11,7 @@ class LangModel(nn.Module):
         # Token ids to vectors
         self.embedding = nn.Embedding(output_size, emb_size, padding_idx=pad_index)
         
-        if nn_type == 'RNN':
-            self.rnn = nn.RNN(emb_size, hidden_size, n_layers, bidirectional=False)
-        elif nn_type == 'LSTM':
-            self.rnn = nn.LSTM(emb_size, hidden_size, n_layers, bidirectional=False)
+        self.lstm = nn.LSTM(emb_size, hidden_size, n_layers, bidirectional=False)
 
         self.embedding_dropout = nn.Dropout(emb_dp_prob)
         self.output_dropout = nn.Dropout(out_dp_prob)
@@ -40,16 +37,16 @@ class LangModel(nn.Module):
         else:
             emb = self.embedding_dropout(emb)            
 
-        rnn_out, _ = self.rnn(emb)
+        lstm_out, _ = self.lstm(emb)
 
         if self.variational_dropout:
-            if self.rnn_vd_mask is None:
-                self.rnn_vd_mask = self.generate_vd_mask(rnn_out.size(2), rnn_out.size(0))[:, :rnn_out.size(1), :]
-            rnn_out = rnn_out * self.rnn_vd_mask
+            if self.lstm_vd_mask is None:
+                self.lstm_vd_mask = self.generate_vd_mask(lstm_out.size(2), lstm_out.size(0))[:, :lstm_out.size(1), :]
+            lstm_out = lstm_out * self.lstm_vd_mask
         else:
-            rnn_out = self.output_dropout(rnn_out)
+            lstm_out = self.output_dropout(lstm_out)
 
-        output = self.output(rnn_out).permute(0, 2, 1)
+        output = self.output(lstm_out).permute(0, 2, 1)
         return output
     
      # Get the embedding for a specific token
@@ -75,7 +72,7 @@ class LangModel(nn.Module):
     
     def reset_vd_mask(self):
         self.emb_vd_mask = None
-        self.rnn_vd_mask = None
+        self.lstm_vd_mask = None
 
     def generate_vd_mask(self, size, batch_size):
         scale = 1 / (1 - self.variational_dp_prob)
