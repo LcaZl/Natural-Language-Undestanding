@@ -9,9 +9,9 @@ if __name__ == "__main__":
 
     train_dataset, dev_dataset, test_dataset, vocab_len, lang = load_dataset()
 
-    train_loader = DataLoader(train_dataset, batch_size=256, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),  shuffle=True)
-    dev_loader = DataLoader(dev_dataset, batch_size=128, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
-    test_loader = DataLoader(test_dataset, batch_size=128, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
+    train_loader = DataLoader(train_dataset, batch_size=40, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]),  shuffle=True)
+    dev_loader = DataLoader(dev_dataset, batch_size=40, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
+    test_loader = DataLoader(test_dataset, batch_size=40, collate_fn=partial(collate_fn, pad_token=lang.word2id["<pad>"]))
     
     criterion_train = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"])
     criterion_eval = nn.CrossEntropyLoss(ignore_index=lang.word2id["<pad>"], reduction='sum')
@@ -26,7 +26,6 @@ if __name__ == "__main__":
             'lang':lang,
             'n_epochs':100,
             'patience':3,
-            'clip':5,
             'layers':3,
             'output_dropout': 0.10,
             'embedding_dropout': 0.10,
@@ -42,6 +41,7 @@ if __name__ == "__main__":
             'model_name':'LSTM',
             'weight_path':f'models_weight/LSTM.pth',
             'optmz_type':'Adam',
+            'clip':5,
             'optmz_learning_rate': 5e-3,
             'weight_tying': False,
             'variational_dropout': False,
@@ -52,6 +52,7 @@ if __name__ == "__main__":
             'model_name':'LSTM',
             'weight_path':f'models_weight/LSTM_WT.pth',
             'optmz_type':'Adam',
+            'clip':5,
             'optmz_learning_rate': 5e-3,
             'weight_tying': True,
             'variational_dropout': False,
@@ -62,6 +63,7 @@ if __name__ == "__main__":
             'model_name':'LSTM',
             'weight_path':f'models_weight/LSTM_VD.pth',
             'optmz_type':'Adam',
+            'clip':5,
             'optmz_learning_rate': 5e-3,
             'weight_tying': False,
             'variational_dropout': True,
@@ -72,6 +74,7 @@ if __name__ == "__main__":
             'model_name':'LSTM',
             'weight_path':f'models_weight/LSTM_WTVD.pth',
             'optmz_type':'Adam',
+            'clip':5,
             'optmz_learning_rate': 5e-3,
             'weight_tying': True,
             'variational_dropout': True,
@@ -84,6 +87,7 @@ if __name__ == "__main__":
             'optmz_type':'NT-AvSGD',
             'optmz_learning_rate':0.7,
             'weight_tying': False,
+            'clip':5,
             'variational_dropout': False,
             'logging_interval': 1,
             'non_monotonic_interval': 5,
@@ -95,6 +99,7 @@ if __name__ == "__main__":
             'weight_path':f'models_weight/LSTM_NTAvSGD_WT.pth',
             'optmz_type':'NT-AvSGD',
             'optmz_learning_rate':0.7,
+            'clip':5,
             'weight_tying': True,
             'variational_dropout': False,
             'logging_interval': 1,
@@ -107,6 +112,7 @@ if __name__ == "__main__":
             'weight_path':f'models_weight/LSTM_NTAvSGD_VD.pth',
             'optmz_type':'NT-AvSGD',
             'optmz_learning_rate':0.7,
+            'clip':5,
             'weight_tying': False,
             'variational_dropout': True,
             'logging_interval': 1,
@@ -119,6 +125,7 @@ if __name__ == "__main__":
             'weight_path':f'models_weight/LSTM_NTAvSGD_WTVD.pth',
             'optmz_type':'NT-AvSGD',
             'optmz_learning_rate':0.7,
+            'clip':5,
             'weight_tying': True,
             'variational_dropout': True,
             'logging_interval': 1,

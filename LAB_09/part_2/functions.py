@@ -157,45 +157,43 @@ def train_LangModelnt_avsgd(parameters, model, optimizer):
         P = 3
         t = 0
         best_ppl = math.inf
-
+        PPL = math.inf
         pbar = tqdm(range(0, parameters['n_epochs']))  # Inizio da 0
         for epoch_K in pbar:
             
             loss = train_loop(parameters['train_loader'], optimizer, parameters['criterion_train'], model, parameters['clip'])    
                         
-            if epoch_K % parameters['logging_interval'] == 0 and T == 0:  # Controlla se questa condizione è mai vera                      
+            if epoch_K % parameters['logging_interval'] == 0:  # Controlla se questa condizione è mai vera                      
                 # Evaluate the model on the validation set
                 PPL, _ = eval_loop(parameters['dev_loader'], parameters['criterion_eval'], model)
-                pbar.set_description("PPL: %f" % PPL)
+                logs.append(PPL)
+                t = t + 1
 
                 # If the current PPL is better than the best PPL
                 if t > parameters['non_monotonic_interval'] and PPL > min(logs[:t-parameters['non_monotonic_interval']+1]): 
                     T = epoch_K
 
-                logs.append(PPL)
-                t = t + 1
-            
                 if PPL < best_ppl:
                     best_ppl = PPL
-                    P = parameters['patience']
+                    best_model = copy.deepcopy(model).to('cpu')
                 else:
                     P -= 1
 
                 if P <= 0:
                     break
-            else:
-                if T != 0:
-                    saved_weights.append(copy.deepcopy(model.state_dict()))
+
+            if T != 0:
+                saved_weights.append(copy.deepcopy(model.state_dict()))
+
+            pbar.set_description(f'Epoch_K: {epoch_K} - PPL:{PPL} - T:{T} - t:{t}')
 
         # Average the saved weights to implement NT-AvSGD
-        if T != 0 and len(saved_weights) > 0:
-            avg_weights = average_weights(saved_weights[T:])  # Average only weights after T
-        elif len(saved_weights) > 0:
-            avg_weights = average_weights(saved_weights)  # If T was never set, average all
-        else:
-            # Gestisci il caso in cui non ci sono pesi salvati
-            avg_weights = model.state
-        model.load_state_dict(avg_weights)
+        if T != 0 and saved_weights:
+            avg_weights = average_weights(saved_weights)
+            model.load_state_dict(avg_weights)
+        elif best_model is not None:
+            model = best_model
+
         model.to(DEVICE)
         torch.save(model.state_dict(), parameters['weight_path'])
         final_ppl,  _ = eval_loop(parameters['test_loader'], parameters['criterion_eval'], model)            
