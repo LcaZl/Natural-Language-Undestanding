@@ -62,9 +62,6 @@ def train_model(parameters):
         model = best_model[0]
         best_report = best_model[1]
 
-        for fold, losses in losses.items():
-            print(f'Loss for {fold}:{losses}')
-
         data_to_save = {
             'model_state': model.state_dict(),
             'reports': reports,
@@ -109,7 +106,7 @@ def train_lm(parameters):
 
             for epoch in range(parameters['epochs']):        
                 losses = train_loop(train_loader, optimizer, model, parameters)
-                train_losses[loss_idx].extend(loss)
+                train_losses[loss_idx].extend(losses)
 
                 if epoch % 5 == 0:
                     losses, score, report = evaluation(model, parameters, dev_loader)

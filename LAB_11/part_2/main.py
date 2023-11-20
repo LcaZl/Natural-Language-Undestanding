@@ -2,18 +2,19 @@ from functions import *
     
 if __name__ == "__main__":
 
-    skf = StratifiedKFold(n_splits=5, random_state=42, shuffle = True)
+    FOLDS = 10
+    skf = StratifiedKFold(n_splits=FOLDS, random_state=42, shuffle = True)
     folds, test_loader, lang = load_dataset(skf)
 
     parameters = {
             'task': 'ABSA',
             'clip':5,
             'epochs': 200,
-            'n_splits':10,
             'runs':5,
+            'folds':FOLDS,
             'optimizer':'Adam',
-            'dropout': 0.1,
-            'learning_rate': 5e-5,
+            'dropout': 0.05,
+            'learning_rate': 1e-4,
             'lang':lang,
             'output_aspects': lang.aspect_labels,
             'output_polarities':lang.polarity_labels,

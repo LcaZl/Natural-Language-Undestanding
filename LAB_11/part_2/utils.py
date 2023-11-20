@@ -88,8 +88,8 @@ def process_raw_data(dataset):
                 pol_tags.append((aspect_start_index, len(words_tagged) - 1, pol_tag))
 
             tokens = text
-            tokens = [word.lower() for word in tokens if word.isalpha()]
-            tokens = [str(w2n.word_to_num(token)) if token in w2n.american_number_system else token for token in tokens]
+            #tokens = [word.lower() for word in tokens if word.isalpha()]
+            #tokens = [str(w2n.word_to_num(token)) if token in w2n.american_number_system else token for token in tokens]
 
             new_dataset.append((' '.join(tokens), aspect_tags, pol_tags))
 
@@ -170,13 +170,13 @@ def load_dataset(skf):
         print(' - Aspects frequencies:', aspect_frequencies, '\n - Aspects weigth:', aspect_weights) 
         print(' - Polarities frequencies:', polarity_frequencies, '\n - Polarities weigth:', polarity_weights) 
 
-        train_loader = DataLoader(train_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
-        val_loader = DataLoader(val_dataset, batch_size = 32, shuffle = True, collate_fn = collate_fn)
+        train_loader = DataLoader(train_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
         
         fold_datasets.append((train_loader, val_loader, list(aspect_weights.values()), list(polarity_weights.values())))
 
     test_dataset = Dataset(test_set, lang)
-    test_loader = DataLoader(test_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
 
     print(' - Aspects labels :', lang.aspect2id)
     print(' - Polarity labels :', lang.pol2id)
