@@ -23,7 +23,7 @@ if __name__ == "__main__":
             'test_loader':test_loader
         }
     
-    model, reports, best_report = train_model(parameters)
+    model, reports, best_report, losses = train_model(parameters)
     cols = ['Fold', 'Run', 'ot_precision', 'ot_recall', 'ot_f1', 'ts_macro_f1', 'ts_micro_p', 'ts_micro_r', 'ts_micro_f1']
     metrics = ['ot_precision', 'ot_recall', 'ot_f1', 'ts_micro_p', 'ts_micro_r', 'ts_micro_f1'] #'ts_macro_f1'
 
@@ -37,4 +37,3 @@ if __name__ == "__main__":
     best_report_df = pd.DataFrame([best_report], columns=cols).set_index('Fold').round(3)
     print(f'\n - Best model at fold {best_report[0]}.')
     print(' - Model report:\n',tabulate(best_report_df.sort_index(), headers='keys', tablefmt='grid', showindex=True))
-

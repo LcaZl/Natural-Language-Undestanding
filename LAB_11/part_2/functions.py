@@ -11,6 +11,7 @@ from sklearn.metrics import classification_report
 from tabulate import tabulate
 import torch.nn.init as init
 from itertools import product
+import matplotlib.pyplot as plt
 
 from model import *
 from utils import *
@@ -55,7 +56,7 @@ def train_model(parameters):
         model, _ = init_model(parameters, saved_data['model_state'])
         reports = saved_data['reports']
         best_report = saved_data['best_report']
-        #losses = saved_data['losses']
+        losses = saved_data['losses']
     else:
         best_model, reports, losses = train_lm(parameters)
         best_params = parameters
@@ -71,7 +72,7 @@ def train_model(parameters):
         }
         torch.save(data_to_save, model_filename)
 
-    return model, reports, best_report
+    return model, reports, best_report, losses
 
 def train_lm(parameters):
     dev_losses = {}
@@ -102,12 +103,13 @@ def train_lm(parameters):
             S = 0
 
             for epoch in range(parameters['epochs']):        
-                losses = train_loop(train_loader, optimizer, model, parameters)
-                train_losses[loss_idx].extend(losses)
+                t_losses = train_loop(train_loader, optimizer, model, parameters)
 
                 if epoch % 5 == 0:
-                    losses, score, report = evaluation(model, parameters, dev_loader)
-                    dev_losses[loss_idx].extend(losses)     
+                    v_losses, score, report = evaluation(model, parameters, dev_loader)
+                    dev_losses[loss_idx].extend(np.mean(v_losses))   
+                    train_losses[loss_idx].extend(np.mean(t_losses))
+  
                     if score > S:
                         S = score
                     else:
@@ -271,4 +273,3 @@ def eval_loop(data_loader, model, parameters):
 
     ote_report, ts_report = evaluate(gold_ot, gold_ts, pred_ot, pred_ts)
     return losses, ote_report, ts_report
-    

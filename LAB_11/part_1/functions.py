@@ -11,6 +11,8 @@ from sklearn.metrics import classification_report
 from tabulate import tabulate
 import torch.nn.init as init
 from itertools import product
+import json
+import matplotlib.pyplot as plt
 
 from utils import *
 from model import *
@@ -57,7 +59,7 @@ def train_model(parameters):
         model, _ = init_model(saved_data['parameters'], saved_data['model_state'])
         reports = saved_data['report']
         best_report = saved_data['best_report']
-        #losses = saved_data['losses']
+        losses = saved_data['losses']
 
     else:
         best_model, reports, losses = train_lm(parameters)
@@ -74,7 +76,7 @@ def train_model(parameters):
         }
         torch.save(data_to_save, model_filename)
 
-    return model, reports, best_report
+    return model, reports, best_report, losses
 
 def init_model(parameters, model_state = None):
 
@@ -165,7 +167,7 @@ def train_loop(data_loader, optimizer, model, parameters):
         input_ids = sample['text']
         attention_mask = sample['attention_masks']
 
-        output = model(input_ids, attention_mask)#, vader_scores)
+        output = model(input_ids, attention_mask)
 
         loss = parameters['criterion'](output.view(-1), sample['labels'].float())
         losses.append(loss.item())
@@ -196,7 +198,7 @@ def eval_loop(data_loader, model, parameters):
             input_ids = sample['text']
             attention_mask = sample['attention_masks']
 
-            outputs = model(input_ids, attention_mask)#, vader_scores)
+            outputs = model(input_ids, attention_mask)
             loss = parameters['criterion'](outputs.view(-1), sample['labels'].float())
             losses.append(loss.item())
 
@@ -210,25 +212,33 @@ def eval_loop(data_loader, model, parameters):
 
     return losses, report
 
-def create_subj_filter(dataset, model, subj_lang):
+def create_subj_filter(dataset, model, subj_lang, filename='subj_filter.json'):
+
+    if os.path.exists(filename):
+        with open(filename, 'r') as file:
+            filter = json.load(file)
+            print(f' - Filter found and loaded. Length:{len(filter)}.')
+        return filter
+
     model.to(DEVICE)
     model.eval()
     filter = []
-    
-    with torch.no_grad():
-        
-        for sample in tqdm(dataset):
 
+    with torch.no_grad():
+        for sample in tqdm(dataset):
             outputs = model(sample['text'], sample['attention_masks'])
             predictions = torch.round(torch.sigmoid(outputs))
-            subjective_mask = predictions.view(-1) == 0 # Id 0 means objective sentence
+            subjective_mask = predictions.view(-1) == 0  # Id 0 means objective sentence
             
             for i in range(sample['text'].size(0)):
                 if subj_lang.id2class[subjective_mask.tolist()[i]] == REMOVE_CLASS:
-
                     # Rimuovi CLS, SEP e padding
                     text_ids = sample['text'][i].tolist()
                     clean_text_ids = [id for id in text_ids if id != PAD_TOKEN]
                     filter.append(clean_text_ids)
+
+    # Salva il filtro nel file
+    with open(filename, 'w') as file:
+        json.dump(filter, file)
 
     return filter

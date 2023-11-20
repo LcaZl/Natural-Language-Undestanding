@@ -36,7 +36,7 @@ if __name__ == "__main__":
             'lang':subj_lang,
         }
     
-    subj_model, subj_training_report, best_report = train_model(training_parameters['Subj_model'])
+    subj_model, subj_training_report, best_report, losses = train_model(training_parameters['Subj_model'])
 
     run_level, fold_level = get_scores(subj_training_report)
     best_models.loc['subjectivity_detection'] = best_report
@@ -59,7 +59,7 @@ if __name__ == "__main__":
             'lang':mr_lang,
         }
     
-    pol_model, pol_training_report, best_report = train_model(training_parameters['polarity_model'])
+    pol_model, pol_training_report, best_report, losses = train_model(training_parameters['polarity_model'])
     
     run_level, fold_level = get_scores(pol_training_report)
     best_models.loc['polarity_detection'] = best_report
@@ -88,7 +88,7 @@ if __name__ == "__main__":
         'lang':mr2_lang, 
     }
     
-    pol2_model, pol2_training_report = train_model(training_parameters['polarity_model_no_obj'])
+    pol2_model, pol2_training_report, best_report, losses = train_model(training_parameters['polarity_model_no_obj'])
 
     run_level, fold_level = get_scores(pol2_training_report)
     best_models.loc['polarity_detection_no_objective'] = best_report
