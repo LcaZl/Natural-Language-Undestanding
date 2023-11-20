@@ -61,17 +61,6 @@ if __name__ == "__main__":
 
         'Experiment_2': {
             'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM_VD.pth',
-            'optmz_type':'Adam',
-            'clip':5,
-            'optmz_learning_rate': 5e-3,
-            'weight_tying': False,
-            'variational_dropout': True,
-            **experiment_base
-        }, 
-
-        'Experiment_3': {
-            'model_name':'LSTM',
             'weight_path':f'models_weight/LSTM_WTVD.pth',
             'optmz_type':'Adam',
             'clip':5,
@@ -81,7 +70,7 @@ if __name__ == "__main__":
             **experiment_base
         },
 
-        'Experiment_4': {
+        'Experiment_3': {
             'model_name':'LSTM',
             'weight_path':f'models_weight/LSTM_NTAvSGD.pth',
             'optmz_type':'NT-AvSGD',
@@ -94,7 +83,7 @@ if __name__ == "__main__":
             **experiment_base
         },
 
-        'Experiment_5': {
+        'Experiment_4': {
             'model_name':'LSTM',
             'weight_path':f'models_weight/LSTM_NTAvSGD_WT.pth',
             'optmz_type':'NT-AvSGD',
@@ -107,20 +96,7 @@ if __name__ == "__main__":
             **experiment_base
         },
 
-        'Experiment_6': {
-            'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM_NTAvSGD_VD.pth',
-            'optmz_type':'NT-AvSGD',
-            'optmz_learning_rate':0.7,
-            'clip':5,
-            'weight_tying': False,
-            'variational_dropout': True,
-            'logging_interval': 1,
-            'non_monotonic_interval': 5,
-            **experiment_base
-        },
-
-        'Experiment_7': {
+        'Experiment_5': {
             'model_name':'LSTM',
             'weight_path':f'models_weight/LSTM_NTAvSGD_WTVD.pth',
             'optmz_type':'NT-AvSGD',

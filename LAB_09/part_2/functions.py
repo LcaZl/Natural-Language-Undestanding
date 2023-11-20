@@ -83,7 +83,7 @@ def execute_experiments(experiments):
             print(f'{experiment_id} final score:\n')
             print(tabulate(experiment_result, headers='keys', tablefmt='grid', showindex=True), '\n')
             scores = pd.concat([scores, experiment_result])
-            
+
         return scores
 
 def train_lm(parameters, model, optimizer):
@@ -105,11 +105,11 @@ def train_lm(parameters, model, optimizer):
 
         for epoch in pbar:
 
-            loss = train_loop(parameters['train_loader'], optimizer, parameters['criterion_train'], model, parameters['clip'])    
+            _ = train_loop(parameters['train_loader'], optimizer, parameters['criterion_train'], model, parameters['clip'])    
             
             if epoch % 1 == 0:
                 
-                ppl_dev, loss_dev = eval_loop(parameters['dev_loader'], parameters['criterion_eval'], model)
+                ppl_dev, _ = eval_loop(parameters['dev_loader'], parameters['criterion_eval'], model)
                 pbar.set_description("PPL: %f" % ppl_dev)
 
                 if  ppl_dev < best_ppl:  
@@ -206,16 +206,11 @@ def load_model_and_print_ppl(model, parameters):
 
     Parameters:
     - model (torch.nn.Module): untrained model architecture
-    - model_path (str): path to the file containing the saved model parameters
-    - test_loader (torch.utils.data.DataLoader): dataLoader for the test set
-    - criterion_eval (torch.nn.Module): loss function used during evaluation
-    - DEVICE (str or torch.DEVICE): DEVICE
-    
+    - parameters (dict): parameters for the procedure
+
     Returns:
     - ppl (float): perplexity of the model
     """
-    
-    # Check if the model file exists at the specified path.
     if not os.path.exists(parameters['weight_path']):
         print(f"\n-> No model file found at {parameters['weight_path']}.\n")
         return None
