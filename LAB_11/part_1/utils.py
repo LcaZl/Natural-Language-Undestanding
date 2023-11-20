@@ -67,7 +67,6 @@ def preprocess(dataset, label, mark_neg = True):
             attention_mask = tokenized_sent['attention_mask']
 
             if len(encoded_sentence) > BERT_MAX_LEN:
-                print('longer sent')
                 chunked_sentences = chunk_sequence(encoded_sentence)
                 chunked_attention_masks = chunk_sequence(attention_mask)
 
@@ -76,7 +75,6 @@ def preprocess(dataset, label, mark_neg = True):
             else:
                 new_dataset.append((encoded_sentence, attention_mask, label))
         
-    print(maxlen)
     return new_dataset
 
 def filter_movie_reviews(filter):
@@ -249,15 +247,12 @@ def collate_fn(batch):
                 exit(0)
         max_len = 1 if max(lengths)==0 else max(lengths)
 
-        # Pad token is zero in our case
-        # So we create a matrix full of PAD_TOKEN (i.e. 0) with the shape 
-        # batch_size X maximum length of a sequence
         padded_seqs = torch.LongTensor(len(sequences), max_len).fill_(PAD_TOKEN)
         for i, seq in enumerate(sequences):
             end = lengths[i]
-            padded_seqs[i, :end] = seq # We copy each sequence into the matrix
+            padded_seqs[i, :end] = seq
 
-        padded_seqs = padded_seqs.detach()  # We remove these tensors from the computational graph
+        padded_seqs = padded_seqs.detach()
         return padded_seqs, lengths
 
     new_item = {}

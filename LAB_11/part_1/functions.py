@@ -17,6 +17,26 @@ from model import *
 
 REMOVE_CLASS = 'obj'
 
+def get_scores(reports):
+    df_runs = pd.DataFrame(columns=['Fold', 'Run', 'F1-score', 'F1 std.', 'Accuracy', 'Accuracy std.'])
+    fs, accs = [], []
+
+    for [fold, run, f, acc] in reports:
+        fs.append(f)
+        accs.append(acc)
+        df_runs.loc[len(df_runs)] = [fold ,run, f, 0, acc, 0]
+    
+    df_runs = df_runs.round(4)
+
+    df_folds = df_runs.groupby('Fold').agg({
+        'F1-score': ['mean', 'std'],
+        'Accuracy': ['mean', 'std']
+    }).reset_index()
+    df_folds.columns = ['Fold', 'F1-score Mean', 'F1-score Std', 'Accuracy Mean', 'Accuracy Std']
+
+    df_folds = df_folds.round(4)
+    return df_runs, df_folds
+
 def train_model(parameters):
 
     print(f'\nStart Training:')
@@ -36,12 +56,15 @@ def train_model(parameters):
         print(f'Model founded. Parameters:', saved_data['parameters'])
         model, _ = init_model(saved_data['parameters'], saved_data['model_state'])
         reports = saved_data['report']
+        best_report = saved_data['best_report']
         #losses = saved_data['losses']
 
     else:
         best_model, reports, losses = train_lm(parameters)
 
         model = best_model[0]
+        best_report = best_model[1]
+
         data_to_save = {
             'model_state': best_model[0].state_dict(),
             'best_report': best_model[1],
@@ -51,10 +74,7 @@ def train_model(parameters):
         }
         torch.save(data_to_save, model_filename)
 
-    cols = ['Fold','Run','F1-score', 'Accuracy']
-    training_report = pd.DataFrame(reports, columns=cols).set_index('Fold')
-
-    return model, training_report
+    return model, reports, best_report
 
 def init_model(parameters, model_state = None):
 
@@ -212,45 +232,3 @@ def create_subj_filter(dataset, model, subj_lang):
                     filter.append(clean_text_ids)
 
     return filter
-
-"""
-Used once to fine tune some hyper parameters. Before changing the architecture of the model.
-"""
-def grid_search(parameters):
-
-    print('Starting grid search for:', parameters['grid_search_parameters'].keys(), '\n')
-    grid = list(product(*parameters['grid_search_parameters'].values()))
-
-    def to_parameter_dict(keys, values):
-        return {key: value for key, value in zip(keys, values)}
-
-    best_score = 0
-    best_params = None
-    best_model = None
-    best_losses = None
-    best_model_reports = None
-
-    for i, params_tuple in enumerate(grid):
-        combined_parameters = {**parameters, **to_parameter_dict(parameters['grid_search_parameters'].keys(), params_tuple)}
-
-        print(f'({i+1}/{len(grid)})- Current parameters:',{key: combined_parameters[key] for key in combined_parameters.keys() if key in combined_parameters['grid_search_parameters'].keys()})
-
-        b_model, reports, losses = train_lm(combined_parameters)
-        
-        f = b_model[1][1]
-        acc = b_model[1][2]
-        score = (f + acc) / 2
-
-        print(f'- Best model performance -  Score F1: {b_model[1][1]} - Accuracy: {b_model[1][2]}\n')
-        
-        if score > best_score:
-            best_model_reports = reports
-            best_params = combined_parameters
-            best_model = b_model 
-            best_losses = losses
-            best_score = score
-
-    print('\nEnd grid search:')
-    print(f' - Best parameters: ',{key: combined_parameters[key] for key in best_params.keys() if key in best_params['grid_search_parameters'].keys()},'\n')
-
-    return best_model, best_model_reports, best_losses, best_params

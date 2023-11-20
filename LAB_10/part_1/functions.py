@@ -61,7 +61,7 @@ def execute_experiment(exp_id, parameters):
 
     if os.path.exists(model_filename):
         saved_data = torch.load(model_filename)
-        print(f'Model founded.\n Parameters:', saved_data['parameters'])
+        print(f'Best model founded.\n\n Parameters:', saved_data['parameters'])
         model, _ = init_model(parameters, saved_data['model_state'])
 
         best_model = (model, saved_data['best_report'])
