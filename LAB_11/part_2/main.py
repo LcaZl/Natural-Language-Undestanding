@@ -14,7 +14,7 @@ if __name__ == "__main__":
             'folds':FOLDS,
             'optimizer':'Adam',
             'dropout': 0.0,
-            'learning_rate': 5e-5,
+            'learning_rate': 1e-4,
             'lang':lang,
             'output_aspects': lang.aspect_labels,
             'output_polarities':lang.polarity_labels,

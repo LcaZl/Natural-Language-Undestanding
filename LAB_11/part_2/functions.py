@@ -105,7 +105,7 @@ def train_lm(parameters):
             for epoch in range(parameters['epochs']):        
                 tr_loss = train_loop(train_loader, optimizer, model, parameters)
 
-                if epoch % 5 == 0:
+                if epoch % 1 == 0:
                     dev_loss, score, report = evaluation(model, parameters, dev_loader)
                     dev_losses[loss_idx].append(np.mean(dev_loss))   
                     train_losses[loss_idx].append(np.mean(tr_loss))
@@ -141,7 +141,7 @@ def evaluation(model, parameters, dataset):
     ot_prec = round(ote_report[0], 3)
     ts_f = round(ts_report[0], 3)
     ts_prec = round(ts_report[1], 3)
-    score = round(np.mean([ot_f, ot_prec, ts_f, ts_prec]), 2)
+    score = round(np.mean([ot_f, ts_f]), 2)
     report = [round(el, 3) for el in (ote_report + ts_report)]
 
     return losses, score, report
