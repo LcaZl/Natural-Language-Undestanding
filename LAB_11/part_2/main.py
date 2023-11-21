@@ -1,6 +1,7 @@
 from functions import *
     
 if __name__ == "__main__":
+    TESTING = False
 
     FOLDS = 10
     skf = StratifiedKFold(n_splits=FOLDS, random_state=42, shuffle = True)
