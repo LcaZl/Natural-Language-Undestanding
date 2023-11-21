@@ -105,7 +105,7 @@ def train_lm(parameters):
             for epoch in range(parameters['epochs']):        
                 tr_loss = train_loop(train_loader, optimizer, model, parameters)
 
-                if epoch % 2 == 0:
+                if epoch % 5 == 0:
                     dev_loss, score, report = evaluation(model, parameters, dev_loader)
                     dev_losses[loss_idx].append(np.mean(dev_loss))   
                     train_losses[loss_idx].append(np.mean(tr_loss))
