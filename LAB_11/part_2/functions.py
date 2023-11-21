@@ -273,3 +273,18 @@ def eval_loop(data_loader, model, parameters):
 
     ote_report, ts_report = evaluate(gold_ot, gold_ts, pred_ot, pred_ts)
     return losses, ote_report, ts_report
+
+def plot_aligned_losses(training_losses, dev_losses, title):
+    step = len(training_losses) / len(dev_losses)
+    selected_training_losses = [training_losses[int(i * step)] for i in range(len(dev_losses))]
+
+    # Crea il grafico
+    plt.figure(num = 3, figsize=(8, 5)).patch.set_facecolor('white')
+    plt.plot(selected_training_losses, label='Training Loss')
+    plt.plot(dev_losses, label='Validation Loss')
+    plt.title(title)
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
