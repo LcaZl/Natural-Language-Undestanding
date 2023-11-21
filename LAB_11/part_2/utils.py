@@ -44,11 +44,11 @@ def read_file(file_path):
     dataset = dataset.split('\n')
     dataset = [el.strip() for el in dataset]
     return dataset
-
+TESTING = True
 def process_raw_data(dataset):
     new_dataset = []
     
-    for sample in dataset:
+    for sample in dataset[:int(len(dataset)/20) if TESTING else len(dataset)]:
 
         if sample: 
 
@@ -252,22 +252,12 @@ class Lang:
                     decoded_seq.append('O')
         return decoded_seq
     
-TESTING = True
 class Dataset(data.Dataset):
     def __init__(self, dataset, lang):
         self.lang = lang
         self.utt_ids, self.asp_ids, self.pol_ids, self.asp_pol_ids, self.asp_pol_indexes, self.attention_masks, self.token_types = self.prepare_data(dataset)
         self.first = True
         self.print_sample = 0
-        if TESTING:
-            test_len = int(len(self.utt_ids)/20)
-            self.utt_ids = self.utt_ids[:test_len]
-            self.asp_ids = self.asp_ids[:test_len]
-            self.pol_ids = self.pol_ids[:test_len]
-            self.asp_pol_ids = self.asp_pol_ids[:test_len]
-            self.asp_pol_indexes = self.asp_pol_indexes[:test_len] 
-            self.attention_masks = self.attention_masks[:test_len] 
-            self.token_types = self.token_types[:test_len]
 
     def prepare_data(self, dataset):
 
