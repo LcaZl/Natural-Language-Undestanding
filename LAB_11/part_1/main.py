@@ -18,11 +18,11 @@ if __name__ == "__main__":
     }
 
     # Training for subjectivity -----------------------------------------------------------------------------------------------------------------------
-    subj_fold_dataset, subj_test, subj_lang = load_dataset('Subjectivity', skf, test_size, tr_batch = 32, vl_batch = 16)
+    subj_fold_dataset, subj_test, subj_lang = load_dataset('Subjectivity', skf, test_size, tr_batch = 64, vl_batch = 32)
     training_parameters['Subj_model'] = {
             **training_baseline,
             'task':'subjectivity_detection',
-            'learning_rate': 5e-5, #0.0005
+            'learning_rate': 1e-4, #0.0005
             'dropout':0.2,      
             'vocab_size': subj_lang.vocab_size,
             'train_folds':subj_fold_dataset,
@@ -83,7 +83,7 @@ if __name__ == "__main__":
     training_parameters['polarity_model_no_obj'] = {
         **training_baseline,
         'task':'polarity_detection_with_filtered_dataset',
-        'learning_rate': 5e-5,
+        'learning_rate': 1e-4,
         'dropout':0.2,
         'vocab_size': mr2_lang.vocab_size,
         'train_folds':mr2_fold_dataset,

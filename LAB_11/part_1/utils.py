@@ -30,7 +30,8 @@ BERT_MAX_LEN = 512
 TOKENIZER = BertTokenizer.from_pretrained('bert-base-uncased')
 DEVICE = 'cuda:0'
 INFO_ENABLED = False
-TESTING = True
+TESTING = False
+
 def preprocess(dataset, label, mark_neg = True):
     new_dataset = []
 
@@ -38,7 +39,7 @@ def preprocess(dataset, label, mark_neg = True):
         return [sequence[i:i + BERT_MAX_LEN] for i in range(0, len(sequence), BERT_MAX_LEN)]
     maxlen = 0
 
-    for tokens in tqdm(dataset[:int(len(dataset)/20) if TESTING else len(dataset)], desc = 'Preprocessing dataset'):
+    for tokens in tqdm(dataset[:int(len(dataset)/40) if TESTING else len(dataset)], desc = 'Preprocessing dataset'):
         text = ' '.join(tokens)
 
         """

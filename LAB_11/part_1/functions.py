@@ -119,7 +119,7 @@ def train_lm(parameters):
             loss_idx = f'Fold_{i}-run_{r}'
             train_losses[loss_idx], dev_losses[loss_idx] = [], []
              
-            P = 5
+            P = 3
             S = 0
             pbar = tqdm(range(0, parameters['epochs']))
 
@@ -138,12 +138,12 @@ def train_lm(parameters):
                     else:
                         P -= 1
 
-                    if P <= 0:
-                        break
 
                 pbar.set_description(f'Epoch {epoch} - TL: {round(np.mean(tr_loss), 3)} - DL: {round(np.mean(dev_loss), 3)} - S:{score} - F1:{report[0]} - Acc:{report[1]}')
-
+                if P <= 0:
+                    break
             _, score, report = evaluation(model, parameters, parameters['test_loader'])
+            pbar.set_description(f'Epoch {epoch} - TL: {round(np.mean(tr_loss), 3)} - DL: {round(np.mean(dev_loss), 3)} - S:{score} - F1:{report[0]} - Acc:{report[1]}')
 
             report = [i] + [r] + report
             reports.append(report)
