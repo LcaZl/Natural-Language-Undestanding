@@ -13,7 +13,7 @@ if __name__ == "__main__":
             'runs':5,
             'folds':FOLDS,
             'optimizer':'Adam',
-            'dropout': 0.05,
+            'dropout': 0.1,
             'learning_rate': 0.0003, # 0001, 00005, 00001
             'lang':lang,
             'output_aspects': lang.aspect_labels,

@@ -44,7 +44,8 @@ def read_file(file_path):
     dataset = dataset.split('\n')
     dataset = [el.strip() for el in dataset]
     return dataset
-TESTING = True
+
+TESTING = False
 def process_raw_data(dataset):
     new_dataset = []
     
