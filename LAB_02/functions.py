@@ -6,6 +6,7 @@ from collections import Counter
 from tabulate import tabulate
 from tqdm import tqdm
 
+
 # Sklearn
 from sklearn.datasets import fetch_20newsgroups 
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
