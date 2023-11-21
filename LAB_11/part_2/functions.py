@@ -17,6 +17,8 @@ from model import *
 from utils import *
 from evals import *
 
+
+
 def init_model(parameters, model_state = None):
 
     model = AspectSentimentModel(
