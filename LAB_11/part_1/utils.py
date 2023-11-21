@@ -206,11 +206,14 @@ class Lang:
     def decode(self, sentence_ids):
         return self.tokenizer.decode(sentence_ids)
 
+TESTING = True
 class Dataset(data.Dataset):
     def __init__(self, samples, lang):
         self.samples = samples
         self.lang = lang
         self.first = True
+        if TESTING:
+            self.samples = self.samples[:int(len(self.samples)/4)]
 
     def __len__(self):
         return len(self.samples)

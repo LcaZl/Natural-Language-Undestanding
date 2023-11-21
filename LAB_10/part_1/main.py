@@ -11,9 +11,9 @@ if __name__ == "__main__":
     training_set, validation_set, test_set, lang = load_dataset()
     
     # Dataloader instantiation
-    train_loader = DataLoader(training_set, batch_size=128, collate_fn=collate_fn,  shuffle=True)
-    dev_loader = DataLoader(validation_set, batch_size=64, collate_fn=collate_fn)
-    test_loader = DataLoader(test_set, batch_size=64, collate_fn=collate_fn)
+    train_loader = DataLoader(training_set, batch_size=64, collate_fn=collate_fn,  shuffle=True)
+    dev_loader = DataLoader(validation_set, batch_size=32, collate_fn=collate_fn)
+    test_loader = DataLoader(test_set, batch_size=32, collate_fn=collate_fn)
     
     experiment_base = {
             'model':'IAS',
@@ -35,7 +35,7 @@ if __name__ == "__main__":
         'Experiment_1':{
             'hidden_layer_size':300,
             'embedded_layer_size':300,
-            'learning_rate':0.001,
+            'learning_rate': 0.001,
             'dropout_probabilities':0,
             'bidirectional':False,
             **experiment_base
@@ -62,34 +62,23 @@ if __name__ == "__main__":
 
     best_model1, reports, losses1 = execute_experiment('Experiment_1', experiments['Experiment_1'])
     scores = get_scores(reports, 'Experiment_1')
+    plot_aligned_losses(losses1[0][f'Run_{best_model1[1][0]}'], 
+                        losses1[1][f'Run_{best_model1[1][0]}'], 
+                        'Experiment 1 - Best model losses')
 
     best_model2, reports, losses2 = execute_experiment('Experiment_2', experiments['Experiment_2'])
     scores = pd.concat([scores, get_scores(reports, 'Experiment_2')], axis=0)
 
+    plot_aligned_losses(losses2[0][f'Run_{best_model2[1][0]}'], 
+                        losses2[1][f'Run_{best_model2[1][0]}'], 
+                        'Experiment 2 - Best model losses')
+
     best_model3, reports, losses3 = execute_experiment('Experiment_3', experiments['Experiment_3'])
     scores = pd.concat([scores, get_scores(reports, 'Experiment_3')], axis=0)
 
+    plot_aligned_losses(losses3[0][f'Run_{best_model3[1][0]}'],
+                         losses3[1][f'Run_{best_model3[1][0]}'], 
+                         'Experiment 3 - Best model losses')
+
     print('Experiments:\n')
     print(tabulate(scores, headers='keys', tablefmt='grid', showindex=True))
-
-
-"""
-    cols = ['Id','Run','Accuracy','Accuracy Std','F score', 'F Std']
-    scores = pd.DataFrame(columns = cols)
-        experiment_result = pd.DataFrame(columns=cols, 
-                                data = [[exp_id, run, accuracy, 0, f1, 0]])
-        print(tabulate(experiment_result, headers='keys', tablefmt='grid', showindex=True))
-        scores = pd.concat([scores, experiment_result])
-
-        slot_f1s = np.asarray(slot_f1s)
-        intent_acc = np.asarray(intent_acc)
-        f1_avg = round(slot_f1s.mean(),3)
-        f1_std = round(slot_f1s.std(),3)
-        accuracy_avg = round(intent_acc.mean(), 3)
-        accuracy_std = round(intent_acc.std(), 3)
-        experiment_result = pd.DataFrame(columns=cols, 
-                                data = [[exp_id, 'Average', accuracy_avg, accuracy_std, f1_avg, f1_std]])
-        
-        scores = pd.concat([scores, experiment_result])
-        #print(tabulate(scores, headers='keys', tablefmt='grid', showindex=True))
-"""

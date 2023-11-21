@@ -111,7 +111,7 @@ def train_lm(parameters):
         train_loader, dev_loader = parameters['train_folds'][i]
         fold_reports = []
 
-        score, report = None, None
+        dev_loss, score, report = None, None, None
         pbar = tqdm(range(0, parameters['runs']))
         for r in pbar:
 
@@ -124,12 +124,12 @@ def train_lm(parameters):
 
             for epoch in range(0, parameters['epochs']):   
 
-                losses = train_loop(train_loader, optimizer, model, parameters)
-                train_losses[loss_idx].extend(losses)
+                tr_loss = train_loop(train_loader, optimizer, model, parameters)
 
-                if epoch % 1 == 0:
-                    losses, score, report = evaluation(model, parameters, dev_loader)
-                    dev_losses[loss_idx].extend(losses)
+                if epoch % 2 == 0:
+                    dev_loss, score, report = evaluation(model, parameters, dev_loader)
+                    dev_losses[loss_idx].append(np.mean(dev_loss))
+                    train_losses[loss_idx].append(np.mean(tr_loss))
 
                     if score > S:
                         S = score
@@ -139,7 +139,7 @@ def train_lm(parameters):
                     if P <= 0:
                         break
 
-                pbar.set_description(f'Run {r} - Epoch {epoch} - L: {round(np.mean(train_losses[loss_idx]), 3)} - S:{score} - Report:{report}')
+                pbar.set_description(f'Run {r} - Epoch {epoch} - TL: {round(np.mean(tr_loss), 3)} - DL: {round(np.mean(dev_loss), 3)} - S:{score} - F1:{report[0]} - Acc:{report[1]}')
 
             _, score, report = evaluation(model, parameters, parameters['test_loader'])
 

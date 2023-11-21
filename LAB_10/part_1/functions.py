@@ -106,13 +106,13 @@ def train_lm(parameters):
 
         for epoch in range(0,parameters['epochs']):
 
-            losses = train_loop(parameters, optimizer, model)
-            train_losses[loss_idx].extend(losses)
+            tr_loss = train_loop(parameters, optimizer, model)
 
-            if epoch % 5 == 0:
-                report_slot, report_intent, losses = eval_loop(parameters['dev_loader'],parameters, model)
+            if epoch % 2 == 0:
+                report_slot, report_intent, dev_loss = eval_loop(parameters['dev_loader'],parameters, model)
                 report = (report_slot, report_intent)
-                dev_losses[loss_idx].extend(losses)
+                train_losses[loss_idx].append(np.mean(tr_loss))
+                dev_losses[loss_idx].append(np.mean(dev_loss))
                 
                 score = report_slot['total']['f']
 
@@ -124,7 +124,7 @@ def train_lm(parameters):
                 if P <= 0: # Early stopping with patience
                     break # Not nice but it keeps the code clean
         
-                pbar.set_description(f'Run {run} - Epoch {epoch} - L: {round(np.mean(losses), 3)} - F1:{score}')
+                pbar.set_description(f'Run {run} - Epoch {epoch} - TL: {round(np.mean(tr_loss), 3)} - DL: {round(np.mean(dev_loss), 3)} - F1:{np.round(score,3)}')
 
         report_slot, report_intent, _ = eval_loop(parameters['test_loader'], parameters, model)
         report = (run, report_slot, report_intent)
@@ -135,7 +135,7 @@ def train_lm(parameters):
             best_score = score
             best_model = (model, report)    
             
-    return best_model, reports, losses
+    return best_model, reports, (train_losses, dev_losses)
 
 def init_weights(mat):
     for m in mat.modules():
@@ -227,3 +227,19 @@ def eval_loop(data, parameters, model):
     report_intent = classification_report(ref_intents, hyp_intents,
                                           zero_division=False, output_dict=True)
     return report_slot, report_intent, losses
+
+
+def plot_aligned_losses(training_losses, dev_losses, title):
+    step = len(training_losses) / len(dev_losses)
+    selected_training_losses = [training_losses[int(i * step)] for i in range(len(dev_losses))]
+
+    # Crea il grafico
+    plt.figure(num = 3, figsize=(8, 5)).patch.set_facecolor('white')
+    plt.plot(selected_training_losses, label='Training Loss')
+    plt.plot(dev_losses, label='Validation Loss')
+    plt.title(title)
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+    plt.show()

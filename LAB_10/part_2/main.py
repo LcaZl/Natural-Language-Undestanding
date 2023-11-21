@@ -14,9 +14,9 @@ if __name__ == "__main__":
     training_set, validation_set, test_set, lang = load_dataset()
     
     # Dataloader instantiation
-    train_loader = DataLoader(training_set, batch_size=128, collate_fn=collate_fn,  shuffle=True)
-    dev_loader = DataLoader(validation_set, batch_size=64, collate_fn=collate_fn)
-    test_loader = DataLoader(test_set, batch_size=64, collate_fn=collate_fn)
+    train_loader = DataLoader(training_set, batch_size=64, collate_fn=collate_fn,  shuffle=True)
+    dev_loader = DataLoader(validation_set, batch_size=32, collate_fn=collate_fn)
+    test_loader = DataLoader(test_set, batch_size=32, collate_fn=collate_fn)
 
 
     experiments = {
@@ -67,9 +67,15 @@ if __name__ == "__main__":
 
     reports, best_model1, losses1 = execute_experiment('Experiment_1', experiments['Experiment_1'])
     scores = get_scores(reports, 'Experiment_1')
-
+    plot_aligned_losses(losses1[0][f'run_{best_model1[1][0]}'], 
+                        losses1[1][f'run_{best_model1[1][0]}'], 
+                        'Experiment 1 - Best model losses')
+    
     reports, best_model2, losses2 = execute_experiment('Experiment_2', experiments['Experiment_2'])
     scores = pd.concat([scores, get_scores(reports, 'Experiment_2')], axis=0)
-
+    plot_aligned_losses(losses2[0][f'run_{best_model2[1][0]}'], 
+                        losses2[1][f'run_{best_model2[1][0]}'], 
+                        'Experiment 2 - Best model losses')
+    
     print('Experiments:\n')
     print(tabulate(scores, headers='keys', tablefmt='grid', showindex=True))

@@ -93,13 +93,20 @@ class Lang():
 
         return vocab
 
-
+TESTING = True
 class IntentsAndSlots(data.Dataset):
 
     def __init__(self, dataset, lang):
         self.lang = lang
         self.utt_ids, self.slot_ids, self.intent_ids, self.masks, self.token_type_ids = self.prepare_data(dataset)
-        
+        if TESTING:
+            test_len = int(len(self.utt_ids)/4)
+            self.utt_ids = self.utt_ids[:test_len]
+            self.slot_ids = self.slot_ids[:test_len]
+            self.intent_ids = self.intent_ids[:test_len] 
+            self.masks = self.masks[:test_len] 
+            self.token_type_ids = self.token_type_ids[:test_len]
+
     def prepare_data(self, dataset):
 
         utt_ids = []

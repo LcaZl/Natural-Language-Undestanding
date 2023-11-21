@@ -91,10 +91,10 @@ def train_lm(parameters):
         parameters['asp_criterion'] = nn.CrossEntropyLoss(weight = torch.tensor(asp_weight).to(DEVICE))
         parameters['pol_criterion'] = nn.CrossEntropyLoss(weight = torch.tensor(pol_weight).to(DEVICE))
         
-        score, report = None, None
         pbar = tqdm(range(0, parameters['runs']))
         for r in pbar:
 
+            dev_loss, score, report = None, None, None
             model, optimizer = init_model(parameters)
             loss_idx = f'fold_{i}-run_{r}'
             train_losses[loss_idx], dev_losses[loss_idx] = [], []
@@ -103,12 +103,12 @@ def train_lm(parameters):
             S = 0
 
             for epoch in range(parameters['epochs']):        
-                t_losses = train_loop(train_loader, optimizer, model, parameters)
+                tr_loss = train_loop(train_loader, optimizer, model, parameters)
 
-                if epoch % 5 == 0:
-                    v_losses, score, report = evaluation(model, parameters, dev_loader)
-                    dev_losses[loss_idx].extend(np.mean(v_losses))   
-                    train_losses[loss_idx].extend(np.mean(t_losses))
+                if epoch % 2 == 0:
+                    dev_loss, score, report = evaluation(model, parameters, dev_loader)
+                    dev_losses[loss_idx].append(np.mean(dev_loss))   
+                    train_losses[loss_idx].append(np.mean(tr_loss))
   
                     if score > S:
                         S = score
@@ -118,7 +118,7 @@ def train_lm(parameters):
                     if P <= 0:
                         break
                                     
-                pbar.set_description(f'Run {r} - Epoch {epoch} - L: {round(np.mean(losses), 3)} - S:{score} - Report:{report}')
+                pbar.set_description(f'Run {r} - Epoch {epoch} - TL: {round(np.mean(tr_loss), 3)} - DL: {round(np.mean(dev_loss), 3)} - S:{score} - OTE:{report[2]} - TS_mF1:{report[6]}')
 
             _, score, report = evaluation(model, parameters, parameters['test_loader'])
             report = [i] + [r] + report
