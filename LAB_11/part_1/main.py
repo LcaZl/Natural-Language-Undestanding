@@ -18,7 +18,7 @@ if __name__ == "__main__":
     }
 
     # Training for subjectivity -----------------------------------------------------------------------------------------------------------------------
-    subj_fold_dataset, subj_test, subj_lang = load_dataset('Subjectivity', skf, test_size, tr_batch = 64, vl_batch = 32)
+    subj_fold_dataset, subj_test, subj_lang = load_dataset('Subjectivity', skf, test_size, tr_batch = 32, vl_batch = 16)
     training_parameters['Subj_model'] = {
             **training_baseline,
             'task':'subjectivity_detection',
