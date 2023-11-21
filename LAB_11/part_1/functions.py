@@ -119,7 +119,7 @@ def train_lm(parameters):
             loss_idx = f'Fold_{i}-run_{r}'
             train_losses[loss_idx], dev_losses[loss_idx] = [], []
              
-            P = 3
+            P = 4
             S = 0
             pbar = tqdm(range(0, parameters['epochs']))
 
@@ -127,13 +127,14 @@ def train_lm(parameters):
 
                 tr_loss = train_loop(train_loader, optimizer, model, parameters)
 
-                if epoch % 2 == 0:
+                if epoch % 1 == 0:
                     dev_loss, score, report = evaluation(model, parameters, dev_loader)
                     dev_losses[loss_idx].append(np.mean(dev_loss))
                     train_losses[loss_idx].append(np.mean(tr_loss))
 
                     if score > S:
                         S = score
+                        P = 4
                     else:
                         P -= 1
 
@@ -184,7 +185,7 @@ def evaluation(model, parameters, dataset):
     losses, report = eval_loop(dataset, model, parameters)
     f = round(report['macro avg']['f1-score'], 4)
     acc = round(report['accuracy'], 4)
-    score = round(np.mean([f, acc]), 4)
+    score = round(f, 4)
     report = [f, acc]
     return losses, score, report
 
