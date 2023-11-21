@@ -13,16 +13,16 @@ if __name__ == "__main__":
             'runs':5,
             'folds':FOLDS,
             'optimizer':'Adam',
-            'dropout': 0.4,
-            'learning_rate': 0.0003, # 0001, 00005, 00001
+            'dropout': 0.2,
+            'learning_rate': 5e-5, # 0001, 00005, 00001
             'lang':lang,
             'output_aspects': lang.aspect_labels,
             'output_polarities':lang.polarity_labels,
             'vocab_size': lang.vocab_size,
             'train_folds':folds,
             'test_loader':test_loader,
-            'polarity_loss_coeff':0.5,
-            'aspect_loss_coeff':0.5
+            'polarity_loss_coeff':0.75,
+            'aspect_loss_coeff':0.25
         }
     
     model, reports, best_report, losses = train_model(parameters)
