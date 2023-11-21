@@ -2,6 +2,7 @@ from functions import *
 
 if __name__ == "__main__":
 
+
     test_size = 0.1
     FOLDS = 10
     skf = StratifiedKFold(n_splits=FOLDS, random_state=42, shuffle = True)
@@ -17,7 +18,7 @@ if __name__ == "__main__":
             'optimizer':'Adam',
     }
 
-    # Training for subjectivity
+    # Training for subjectivity -----------------------------------------------------------------------------------------------------------------------
     subj_fold_dataset, subj_test, subj_lang = load_dataset('Subjectivity', skf, test_size, tr_batch = 64, vl_batch = 32)
     training_parameters['Subj_model'] = {
             **training_baseline,
@@ -40,8 +41,8 @@ if __name__ == "__main__":
     plot_aligned_losses(losses[0][f'Fold_{best_report[0]}-run_{best_report[1]}'], 
                         losses[1][f'Fold_{best_report[0]}-run_{best_report[1]}'], 
                         'Subjectivity detection - Best model losses')
-    
-    # Training for polarity
+
+    # Training for polarity only ----------------------------------------------------------------------------------------------------------------------
     mr_fold_dataset, mr_test, mr_lang = load_dataset('Movie_reviews', skf, test_size, tr_batch = 28, vl_batch = 16)
     training_parameters['polarity_model'] = {
             **training_baseline,
@@ -65,10 +66,12 @@ if __name__ == "__main__":
                         losses[1][f'Fold_{best_report[0]}-run_{best_report[1]}'], 
                         'Polarity detection - Best model losses')
     
+    # Filtering movie reviews -------------------------------------------------------------------------------------------------------------------------
+
     mr4subj_fold_dataset, _, mr4subj_lang = load_dataset('movie_review_4subjectivity', skf, test_size, args = [subj_lang], tr_batch = 32, vl_batch = 16)
+
     print('\nCreating filter for movie reviews ...')
     filter = create_subj_filter(mr4subj_fold_dataset, subj_model, subj_lang)
-
 
     mr2_fold_dataset, mr2_test, mr2_lang = load_dataset('movie_review_filtered', 
                                                         skf, test_size, 
@@ -76,6 +79,8 @@ if __name__ == "__main__":
                                                         tr_batch = 32, 
                                                         vl_batch = 16)
     
+    # Training for polarity with filtered dataset  ----------------------------------------------------------------------------------------------------
+
     training_parameters['polarity_model_no_obj'] = {
         **training_baseline,
         'task':'polarity_detection_with_filtered_dataset',

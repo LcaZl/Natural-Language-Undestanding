@@ -38,6 +38,6 @@ if __name__ == "__main__":
     print(f'\n - Best model at fold {best_report[0]}.')
     print(' - Model report:\n',tabulate(best_report_df.sort_index(), headers='keys', tablefmt='grid', showindex=True))
 
-    plot_aligned_losses(losses[0][f'Fold_{best_report[0]}-run_{best_report[1]}'], 
-                    losses[1][f'Fold_{best_report[0]}-run_{best_report[1]}'], 
+    plot_aligned_losses(losses[0][f'fold_{best_report[0]}-run_{best_report[1]}'], 
+                    losses[1][f'fold_{best_report[0]}-run_{best_report[1]}'], 
                     'Best model losses')
