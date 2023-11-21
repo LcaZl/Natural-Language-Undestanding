@@ -20,7 +20,9 @@ if __name__ == "__main__":
             'output_polarities':lang.polarity_labels,
             'vocab_size': lang.vocab_size,
             'train_folds':folds,
-            'test_loader':test_loader
+            'test_loader':test_loader,
+            'polarity_loss_coeff':1,
+            'ascpet_loss_coeff':0.5
         }
     
     model, reports, best_report, losses = train_model(parameters)

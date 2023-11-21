@@ -252,7 +252,7 @@ class Lang:
                     decoded_seq.append('O')
         return decoded_seq
     
-TESTING = False
+TESTING = True
 class Dataset(data.Dataset):
     def __init__(self, dataset, lang):
         self.lang = lang
@@ -260,7 +260,7 @@ class Dataset(data.Dataset):
         self.first = True
         self.print_sample = 0
         if TESTING:
-            test_len = int(len(self.utt_ids)/4)
+            test_len = int(len(self.utt_ids)/20)
             self.utt_ids = self.utt_ids[:test_len]
             self.asp_ids = self.asp_ids[:test_len]
             self.pol_ids = self.pol_ids[:test_len]

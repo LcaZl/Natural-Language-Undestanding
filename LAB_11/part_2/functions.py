@@ -184,7 +184,7 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - selected_polarity_labels:', selected_polarity_labels.shape, '\n',selected_polarity_labels)
     #print(' - polarity_loss:', polarity_loss)
 
-    loss = aspect_loss + polarity_loss
+    loss = (parameters['ascpet_loss_coeff'] * aspect_loss) + (parameters['polarity_loss_coeff'] * polarity_loss)
     #print(' - loss:', loss)
 
     return loss
