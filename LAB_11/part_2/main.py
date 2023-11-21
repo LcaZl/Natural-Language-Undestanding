@@ -13,7 +13,7 @@ if __name__ == "__main__":
             'runs':5,
             'folds':FOLDS,
             'optimizer':'Adam',
-            'dropout': 0.0,
+            'dropout': 0.4,
             'learning_rate': 1e-4,
             'lang':lang,
             'output_aspects': lang.aspect_labels,
@@ -21,7 +21,7 @@ if __name__ == "__main__":
             'vocab_size': lang.vocab_size,
             'train_folds':folds,
             'test_loader':test_loader,
-            'polarity_loss_coeff':1,
+            'polarity_loss_coeff':0.5,
             'ascpet_loss_coeff':0.5
         }
     
