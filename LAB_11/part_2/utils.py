@@ -252,7 +252,6 @@ class Lang:
                     decoded_seq.append('O')
         return decoded_seq
     
-TESTING = True
 class Dataset(data.Dataset):
     def __init__(self, dataset, lang):
         self.lang = lang

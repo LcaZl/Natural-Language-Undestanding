@@ -7,6 +7,7 @@ from functions import *
 if __name__ == "__main__":
     #Wrtite the code to load the datasets and to run your functions
     # Print the results
+    TESTING = False
 
     os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
@@ -14,9 +15,9 @@ if __name__ == "__main__":
     training_set, validation_set, test_set, lang = load_dataset()
     
     # Dataloader instantiation
-    train_loader = DataLoader(training_set, batch_size=64, collate_fn=collate_fn,  shuffle=True)
-    dev_loader = DataLoader(validation_set, batch_size=32, collate_fn=collate_fn)
-    test_loader = DataLoader(test_set, batch_size=32, collate_fn=collate_fn)
+    train_loader = DataLoader(training_set, batch_size=128, collate_fn=collate_fn,  shuffle=True)
+    dev_loader = DataLoader(validation_set, batch_size=64, collate_fn=collate_fn)
+    test_loader = DataLoader(test_set, batch_size=64, collate_fn=collate_fn)
 
 
     experiments = {

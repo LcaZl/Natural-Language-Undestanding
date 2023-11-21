@@ -93,7 +93,6 @@ class Lang():
 
         return vocab
 
-TESTING = False
 class IntentsAndSlots(data.Dataset):
 
     def __init__(self, dataset, lang):
