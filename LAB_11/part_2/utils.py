@@ -47,7 +47,7 @@ def read_file(file_path):
 
 def process_raw_data(dataset):
     new_dataset = []
-
+    
     for sample in dataset:
 
         if sample: 
