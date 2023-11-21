@@ -1,8 +1,6 @@
 from functions import *
 
 if __name__ == "__main__":
-
-    TESTING = True  
     
     test_size = 0.1
     FOLDS = 10

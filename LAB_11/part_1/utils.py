@@ -205,7 +205,7 @@ class Lang:
 
     def decode(self, sentence_ids):
         return self.tokenizer.decode(sentence_ids)
-
+TESTING = True
 class Dataset(data.Dataset):
     def __init__(self, samples, lang):
         self.samples = samples
