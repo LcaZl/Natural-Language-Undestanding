@@ -23,7 +23,7 @@ if __name__ == "__main__":
             **training_baseline,
             'task':'subjectivity_detection',
             'learning_rate': 5e-5, #0.0005
-            'dropout':0.05,      
+            'dropout':0.2,      
             'vocab_size': subj_lang.vocab_size,
             'train_folds':subj_fold_dataset,
             'test_loader':subj_test,
@@ -42,12 +42,12 @@ if __name__ == "__main__":
                         'Subjectivity detection - Best model losses')
 
     # Training for polarity only ----------------------------------------------------------------------------------------------------------------------
-    mr_fold_dataset, mr_test, mr_lang = load_dataset('Movie_reviews', skf, test_size, tr_batch = 28, vl_batch = 16)
+    mr_fold_dataset, mr_test, mr_lang = load_dataset('Movie_reviews', skf, test_size, tr_batch = 32, vl_batch = 16)
     training_parameters['polarity_model'] = {
             **training_baseline,
             'task':'polarity_detection',
             'learning_rate': 5e-5,
-            'dropout':0.05,         
+            'dropout':0.2,         
             'vocab_size': mr_lang.vocab_size,
             'train_folds':mr_fold_dataset,
             'test_loader':mr_test,
@@ -84,7 +84,7 @@ if __name__ == "__main__":
         **training_baseline,
         'task':'polarity_detection_with_filtered_dataset',
         'learning_rate': 5e-5,
-        'dropout':0.05,
+        'dropout':0.2,
         'vocab_size': mr2_lang.vocab_size,
         'train_folds':mr2_fold_dataset,
         'test_loader':mr2_test,

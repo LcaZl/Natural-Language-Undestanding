@@ -174,9 +174,6 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - aspect_loss:', aspect_loss)
 
     # Polarity loss
-    #aspect_preds = torch.argmax(aspect_logits, dim=-1)
-    #polarity_preds = torch.argmax(polarity_logits, dim=-1)
-    #polarity_mask = (aspect_preds != parameters['lang'].aspect2id['O']) & (polarity_preds != parameters['lang'].pol2id['O']) & attention_mask.bool()
     polarity_mask = attention_mask.bool()
     
     flat_polarity_logits = polarity_logits.contiguous().view(-1, polarity_logits.shape[-1])

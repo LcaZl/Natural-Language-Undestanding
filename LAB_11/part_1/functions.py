@@ -119,7 +119,7 @@ def train_lm(parameters):
             loss_idx = f'Fold_{i}-run_{r}'
             train_losses[loss_idx], dev_losses[loss_idx] = [], []
              
-            P = 3
+            P = 5
             S = 0
             pbar = tqdm(range(0, parameters['epochs']))
 
@@ -134,6 +134,7 @@ def train_lm(parameters):
 
                     if score > S:
                         S = score
+                        P = 5
                     else:
                         P -= 1
 
