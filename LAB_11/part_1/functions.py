@@ -107,13 +107,13 @@ def train_lm(parameters):
 
     for i in range(0,parameters['n_splits']):
 
-        print(f'\nFOLD {i}:')
         train_loader, dev_loader = parameters['train_folds'][i]
         fold_reports = []
 
         dev_loss, score, report = None, None, None
-        pbar = tqdm(range(0, parameters['runs']))
-        for r in pbar:
+
+        for r in range(0, parameters['runs']):
+            print(f'\nFOLD {i} - Run {r}:')
 
             model, optimizer = init_model(parameters)
             loss_idx = f'Fold_{i}-run_{r}'
@@ -121,8 +121,9 @@ def train_lm(parameters):
              
             P = 3
             S = 0
+            pbar = tqdm(range(0, parameters['epochs']))
 
-            for epoch in range(0, parameters['epochs']):   
+            for epoch in pbar:   
 
                 tr_loss = train_loop(train_loader, optimizer, model, parameters)
 
@@ -139,7 +140,7 @@ def train_lm(parameters):
                     if P <= 0:
                         break
 
-                pbar.set_description(f'Run {r} - Epoch {epoch} - TL: {round(np.mean(tr_loss), 3)} - DL: {round(np.mean(dev_loss), 3)} - S:{score} - F1:{report[0]} - Acc:{report[1]}')
+                pbar.set_description(f'Epoch {epoch} - TL: {round(np.mean(tr_loss), 3)} - DL: {round(np.mean(dev_loss), 3)} - S:{score} - F1:{report[0]} - Acc:{report[1]}')
 
             _, score, report = evaluation(model, parameters, parameters['test_loader'])
 

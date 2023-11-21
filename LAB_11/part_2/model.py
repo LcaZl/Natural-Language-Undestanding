@@ -20,6 +20,7 @@ class AspectSentimentModel(nn.Module):
         sequence_output = self.dropout(sequence_output)
 
         aspect_logits = self.aspect_classifier(sequence_output)
+        
         polarity_logits = self.polarity_classifier(sequence_output)
         return aspect_logits, polarity_logits
 

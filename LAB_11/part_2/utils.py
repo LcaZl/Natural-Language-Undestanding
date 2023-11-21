@@ -170,13 +170,13 @@ def load_dataset(skf):
         print(' - Aspects frequencies:', aspect_frequencies, '\n - Aspects weigth:', aspect_weights) 
         print(' - Polarities frequencies:', polarity_frequencies, '\n - Polarities weigth:', polarity_weights) 
 
-        train_loader = DataLoader(train_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
-        val_loader = DataLoader(val_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
+        train_loader = DataLoader(train_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size = 32, shuffle = True, collate_fn = collate_fn)
         
         fold_datasets.append((train_loader, val_loader, list(aspect_weights.values()), list(polarity_weights.values())))
 
     test_dataset = Dataset(test_set, lang)
-    test_loader = DataLoader(test_dataset, batch_size = 128, shuffle = True, collate_fn = collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
 
     print(' - Aspects labels :', lang.aspect2id)
     print(' - Polarity labels :', lang.pol2id)

@@ -8,21 +8,21 @@ if __name__ == "__main__":
 
     parameters = {
             'task': 'ABSA',
-            'clip':1,
+            'clip':5,
             'epochs': 200,
             'runs':5,
             'folds':FOLDS,
             'optimizer':'Adam',
-            'dropout': 0.2,
-            'learning_rate': 5e-5,
+            'dropout': 0.05,
+            'learning_rate': 0.0003, # 0001, 00005, 00001
             'lang':lang,
             'output_aspects': lang.aspect_labels,
             'output_polarities':lang.polarity_labels,
             'vocab_size': lang.vocab_size,
             'train_folds':folds,
             'test_loader':test_loader,
-            'polarity_loss_coeff':0.2,
-            'ascpet_loss_coeff':0.8
+            'polarity_loss_coeff':0.6,
+            'aspect_loss_coeff':0.4
         }
     
     model, reports, best_report, losses = train_model(parameters)

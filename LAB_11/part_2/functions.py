@@ -84,41 +84,41 @@ def train_lm(parameters):
 
     for i in range(0, len(parameters['train_folds'])):
 
-        print(f'\nFOLD {i}:')
         train_loader, dev_loader, asp_weight, pol_weight = parameters['train_folds'][i]
         fold_reports = []
 
         parameters['asp_criterion'] = nn.CrossEntropyLoss(weight = torch.tensor(asp_weight).to(DEVICE))
         parameters['pol_criterion'] = nn.CrossEntropyLoss(weight = torch.tensor(pol_weight).to(DEVICE))
         
-        pbar = tqdm(range(0, parameters['runs']))
-        for r in pbar:
+        for r in range(0, parameters['runs']):
+            print(f'\nFOLD {i} - Run {r}:')
 
             dev_loss, score, report = None, None, None
             model, optimizer = init_model(parameters)
             loss_idx = f'fold_{i}-run_{r}'
             train_losses[loss_idx], dev_losses[loss_idx] = [], []
 
-            P = 3
+            P = 5
             S = 0
+            pbar = tqdm(range(0,parameters['epochs']))
 
-            for epoch in range(parameters['epochs']):        
+            for epoch in pbar:        
                 tr_loss = train_loop(train_loader, optimizer, model, parameters)
 
-                if epoch % 1 == 0:
+                if epoch % 2 == 0:
                     dev_loss, score, report = evaluation(model, parameters, dev_loader)
                     dev_losses[loss_idx].append(np.mean(dev_loss))   
                     train_losses[loss_idx].append(np.mean(tr_loss))
   
                     if score > S:
                         S = score
+                        P = 5
                     else:
                         P -= 1
-
-                    if P <= 0:
-                        break
                                     
-                pbar.set_description(f'Run {r} - Epoch {epoch} - TL: {round(np.mean(tr_loss), 3)} - DL: {round(np.mean(dev_loss), 3)} - S:{score} - OTE:{report[2]} - TS_mF1:{report[6]}')
+                pbar.set_description(f'Epoch {epoch} - TL: {round(np.mean(tr_loss), 3)} - DL: {round(np.mean(dev_loss), 3)} - S:{score} - OTE:{report[2]} - TS_mF1:{report[6]}')
+                if P <= 0:
+                    break
 
             _, score, report = evaluation(model, parameters, parameters['test_loader'])
             report = [i] + [r] + report
@@ -141,7 +141,7 @@ def evaluation(model, parameters, dataset):
     ot_prec = round(ote_report[0], 3)
     ts_f = round(ts_report[0], 3)
     ts_prec = round(ts_report[1], 3)
-    score = round(np.mean([ot_f, ts_f]), 2)
+    score = round(ts_f, 2)
     report = [round(el, 3) for el in (ote_report + ts_report)]
 
     return losses, score, report
@@ -154,7 +154,8 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - attention_mask:', attention_mask.shape, '\n',attention_mask)
     #print(' - aspect_logits:', aspect_logits.shape, '\n',aspect_logits)
     #print(' - polarity_logits:', polarity_logits.shape, '\n',polarity_logits)
-    aspect_mask = attention_mask.bool()
+
+    aspect_mask = attention_mask.bool() 
 
     #print(' - aspect_mask:', aspect_mask.shape, '\n',aspect_mask)
 
@@ -171,12 +172,15 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - aspect_loss:', aspect_loss)
 
     # Polarity loss
-    aspect_mask = attention_mask.bool()
+    #aspect_preds = torch.argmax(aspect_logits, dim=-1)
+    #polarity_preds = torch.argmax(polarity_logits, dim=-1)
+    #polarity_mask = (aspect_preds != parameters['lang'].aspect2id['O']) & (polarity_preds != parameters['lang'].pol2id['O']) & attention_mask.bool()
+    polarity_mask = attention_mask.bool()
     
     flat_polarity_logits = polarity_logits.contiguous().view(-1, polarity_logits.shape[-1])
     flat_polarity_labels = sample['y_polarities'][:, 1:-1].contiguous().view(-1)
-    selected_polarity_logits = flat_polarity_logits[aspect_mask.view(-1)]
-    selected_polarity_labels = flat_polarity_labels[aspect_mask.view(-1)]
+    selected_polarity_logits = flat_polarity_logits[polarity_mask.view(-1)]
+    selected_polarity_labels = flat_polarity_labels[polarity_mask.view(-1)]
     polarity_loss = parameters['pol_criterion'](selected_polarity_logits, selected_polarity_labels)
     #print(' - flat_polarity_logits:', flat_polarity_logits.shape, '\n',flat_polarity_logits)
     #print(' - flat_polarity_labels:', flat_polarity_labels.shape, '\n',flat_polarity_labels)
@@ -184,7 +188,7 @@ def aggregate_loss(aspect_logits, polarity_logits, sample, parameters):
     #print(' - selected_polarity_labels:', selected_polarity_labels.shape, '\n',selected_polarity_labels)
     #print(' - polarity_loss:', polarity_loss)
 
-    loss = (parameters['ascpet_loss_coeff'] * aspect_loss) + (parameters['polarity_loss_coeff'] * polarity_loss)
+    loss = (parameters['aspect_loss_coeff'] * aspect_loss) + (parameters['polarity_loss_coeff'] * polarity_loss)
     #print(' - loss:', loss)
 
     return loss
