@@ -35,7 +35,6 @@ if __name__ == "__main__":
             'runs':5,
             'learning_rate':5e-5,
             'dropout_probabilities':0.1,
-            'slot_loss_coefficient': 1,
             'use_crf':False,
             'criterion_slots' : nn.CrossEntropyLoss(ignore_index = PAD_TOKEN),
             'criterion_intents' : nn.CrossEntropyLoss() },
@@ -55,7 +54,6 @@ if __name__ == "__main__":
             'runs':5,
             'learning_rate':5e-5,
             'dropout_probabilities':0.1,
-            'slot_loss_coefficient': 1,
             'use_crf':True,
             'criterion_slots' : nn.CrossEntropyLoss(ignore_index = PAD_TOKEN),
             'criterion_intents' : nn.CrossEntropyLoss() }

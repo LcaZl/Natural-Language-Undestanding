@@ -164,7 +164,7 @@ def train_loop(data, optimizer, model, parameters):
             slot_loss = parameters['criterion_slots'](active_logits, active_labels)
 
         # 3. Total Loss
-        total_loss = intent_loss + (slot_loss * parameters['slot_loss_coefficient'])
+        total_loss = intent_loss + slot_loss
         losses.append(total_loss.item())
 
         total_loss.backward()
@@ -203,7 +203,7 @@ def eval_loop(data, model, parameters):
                 slot_loss = parameters['criterion_slots'](active_logits, active_labels)      
 
             # 3. Total Loss
-            total_loss = intent_loss + (slot_loss * parameters['slot_loss_coefficient'])
+            total_loss = intent_loss + slot_loss
             losses.append(total_loss.item())
 
             # Intent inference
