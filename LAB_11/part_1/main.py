@@ -83,8 +83,8 @@ if __name__ == "__main__":
     training_parameters['polarity_model_no_obj'] = {
         **training_baseline,
         'task':'polarity_detection_with_filtered_dataset',
-        'learning_rate': 1e-4,
-        'dropout':0.2,
+        'learning_rate': 1e-5,
+        'dropout':0.1,
         'vocab_size': mr2_lang.vocab_size,
         'train_folds':mr2_fold_dataset,
         'test_loader':mr2_test,
