@@ -1,42 +1,4 @@
-# Add functions or classes used for data loading and preprocessing
-import string
-import nltk
-from nltk.corpus import wordnet
-from nltk import pos_tag
-from nltk.corpus import sentiwordnet as swn
-from nltk.sentiment.util import mark_negation
-from sklearn.model_selection import StratifiedKFold
-from nltk.sentiment import SentimentIntensityAnalyzer
-import torch.utils.data as data
-import pandas as pd
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-from nltk.sentiment.util import mark_negation
-from transformers import BertTokenizer
-from nltk.stem import WordNetLemmatizer
-import math
-from nltk.stem import WordNetLemmatizer
-from word2number import w2n
-nltk.download('vader_lexicon')
-nltk.download('sentiwordnet')
-import torch
-import en_core_web_sm
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-import spacy
-from tqdm import tqdm
-nlp = spacy.load("en_core_web_sm")
-sia = SentimentIntensityAnalyzer()
-# Parameters
-PAD_TOKEN = 0
-
-DEVICE = 'cuda:0'
-TRAIN_PATH = 'dataset/laptop14_train.txt'
-TEST_PATH = 'dataset/laptop14_test.txt'
-INFO_ENABLED = False
-BERT_MAX_LEN = 512
-PRINTABLE = 3
+from functions import *
 
 def read_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -45,7 +7,6 @@ def read_file(file_path):
     dataset = [el.strip() for el in dataset]
     return dataset
 
-TESTING = False
 def process_raw_data(dataset):
     new_dataset = []
     
@@ -88,11 +49,7 @@ def process_raw_data(dataset):
                 aspect_tags[-1] = 'S'
                 pol_tags.append((aspect_start_index, len(words_tagged) - 1, pol_tag))
 
-            tokens = text
-            #tokens = [word.lower() for word in tokens if word.isalpha()]
-            #tokens = [str(w2n.word_to_num(token)) if token in w2n.american_number_system else token for token in tokens]
-
-            new_dataset.append((' '.join(tokens), aspect_tags, pol_tags))
+            new_dataset.append((' '.join(text), aspect_tags, pol_tags))
 
             if INFO_ENABLED:
                 print('- Raw       :', words_tagged)
@@ -101,9 +58,6 @@ def process_raw_data(dataset):
                 print('- Polarities:', pol_tags, '\n')    
 
     return new_dataset
-
-
-
 
 def init_weigth(lang, train_dataset):
 
@@ -144,7 +98,8 @@ def load_dataset(skf):
 
     lang = Lang()
 
-    fold_datasets = []  # This will store the dataset splits
+    # Counting the number of tags of each sentence (the number of 'S')
+    fold_datasets = []
     stratify_labels = []
 
     for _, _, pol_tags in train_set:
@@ -154,10 +109,12 @@ def load_dataset(skf):
         elif len(pol_tags) > 3:
             stratify_labels.append(4)
 
+    # To have a view on the distribution
     count = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0, 6:0}
     for l in stratify_labels:
         count[l] += 1
 
+    # Stratifie on these labels
     for k, (train_indices, val_indices) in enumerate(skf.split(train_set, stratify_labels)):
 
         train_samples = [train_set[idx] for idx in train_indices]
@@ -179,6 +136,8 @@ def load_dataset(skf):
     test_dataset = Dataset(test_set, lang)
     test_loader = DataLoader(test_dataset, batch_size = 64, shuffle = True, collate_fn = collate_fn)
 
+    print('\nDataset info:')
+
     print(' - Aspects labels :', lang.aspect2id)
     print(' - Polarity labels :', lang.pol2id)
     print(' - Vocabulary size:', lang.vocab_size)
@@ -188,12 +147,11 @@ def load_dataset(skf):
     print(' - Preprocessed training len:', len(train_set))
     print(' - Training dataset:', len(train_dataset))
     print(' - Test sents:', len(test_raw))
-    print(f' - Test len:', len(test_set))
+    print(' - Test len:', len(test_set))
     print(' - Test dataset:', len(test_dataset))
-    print(f' - Training len:', len(train_set))
-    print(f' - Train sample:', train_set[0])
-    print(f' - Test sample:', test_set[0])
-    print('Dataset loaded.\n\n')
+    print(' - Training len:', len(train_set))
+    print(' - Train sample:', train_set[0])
+    print(' - Test sample:', test_set[0])
 
     return fold_datasets, test_loader, lang
     
@@ -256,71 +214,57 @@ class Lang:
 class Dataset(data.Dataset):
     def __init__(self, dataset, lang):
         self.lang = lang
-        self.utt_ids, self.asp_ids, self.pol_ids, self.asp_pol_ids, self.asp_pol_indexes, self.attention_masks, self.token_types = self.prepare_data(dataset)
-        self.first = True
-        self.print_sample = 0
-
-    def prepare_data(self, dataset):
-
-        utt_ids = []
-        asp_ids = []
-        pol_ids = []
-        asp_pol_ids = []
-        asp_pol_indexes = []
-        attention_masks = []
-        token_types = []
+        self.utt_ids, self.asp_ids, self.pol_ids, self.asp_pol_ids, self.asp_pol_indexes, self.attention_masks, self.token_types = [], [], [], [], [], [], []
 
         for i, entry in enumerate(dataset):
 
-            tokenized_entry = self.lang.tokenizer(entry[0])
-            input_ids = tokenized_entry['input_ids']
-        
-            # Tokenization
-            if INFO_ENABLED:
-                print('----------------------------- Sample ', i, '-----------------------------')
-                print('- Sent          :', entry[0].split())
-                print('- Aspects       :', entry[1])
-                print('- Polarities    :', entry[2])
-                print('- Encoded sentencence     :', input_ids)
+                    tokenized_entry = self.lang.tokenizer(entry[0])
+                    input_ids = tokenized_entry['input_ids']
+                
+                    # Tokenization
+                    if INFO_ENABLED:
+                        print('----------------------------- Sample ', i, '-----------------------------')
+                        print('- Sent          :', entry[0].split())
+                        print('- Aspects       :', entry[1])
+                        print('- Polarities    :', entry[2])
+                        print('- Encoded sentencence     :', input_ids)
 
-            aligned_aspect, aligned_polarity, aligned_asp_pol, asp_pol_index = self.align_tags(entry[1], entry[2], entry[0].split(), input_ids)
+                    aligned_aspect, aligned_polarity, aligned_asp_pol, asp_pol_index = self.align_tags(entry[1], entry[2], entry[0].split(), input_ids)
 
-            if INFO_ENABLED:
-                print('- Aligned encoded aspects :', aligned_aspect)
-                print('- Aligned encoded Polarity:', aligned_polarity)
-                print('- Aligned encoded Asp/Pol :', aligned_asp_pol)
-                print('- Decoded Asp/Pol         :', self.lang.decode_asppol(aligned_asp_pol))
-                print('- Asp/Pol indexes         :', asp_pol_index)
-                print('- Token type ids          :', tokenized_entry['token_type_ids'])
-                print('- Attention mask          :', tokenized_entry['attention_mask'])
+                    if INFO_ENABLED:
+                        print('- Aligned encoded aspects :', aligned_aspect)
+                        print('- Aligned encoded Polarity:', aligned_polarity)
+                        print('- Aligned encoded Asp/Pol :', aligned_asp_pol)
+                        print('- Decoded Asp/Pol         :', self.lang.decode_asppol(aligned_asp_pol))
+                        print('- Asp/Pol indexes         :', asp_pol_index)
+                        print('- Token type ids          :', tokenized_entry['token_type_ids'])
+                        print('- Attention mask          :', tokenized_entry['attention_mask'])
+                    # Verify sample structure
 
-            utt_ids.append(input_ids)
-            asp_ids.append(aligned_aspect)
-            pol_ids.append(aligned_polarity)
-            asp_pol_ids.append(aligned_asp_pol)
-            asp_pol_indexes.append(asp_pol_index)
-            attention_masks.append(tokenized_entry['attention_mask'])
-            token_types.append(tokenized_entry['token_type_ids'])
+                    assert len(input_ids) == len(aligned_aspect) == len(tokenized_entry['attention_mask']) == len(tokenized_entry['token_type_ids']) == len(aligned_polarity)
+                    assert input_ids[0] == self.lang.cls_token_id and input_ids[-1] == self.lang.sep_token_id
+                    for pol in asp_pol_index:
+                        if pol[0] == pol[1]:
+                            assert aligned_aspect[pol[0]] == self.lang.aspect2id['S'] and aligned_aspect[pol[1]] == self.lang.aspect2id['S']
+                        else:
+                            assert pol[0] < pol[1]
+                            assert aligned_aspect[pol[0]] == self.lang.aspect2id['B'] and aligned_aspect[pol[1]] == self.lang.aspect2id['E']
+                            if pol[1] - pol[0] >> 1:
+                                for asp_id in aligned_aspect[pol[0] + 1: pol[1] - 1]:
+                                    assert asp_id == self.lang.aspect2id['I']
 
-            # Verify sample structure
+                    self.utt_ids.append(input_ids)
+                    self.asp_ids.append(aligned_aspect)
+                    self.pol_ids.append(aligned_polarity)
+                    self.asp_pol_ids.append(aligned_asp_pol)
+                    self.asp_pol_indexes.append(asp_pol_index)
+                    self.attention_masks.append(tokenized_entry['attention_mask'])
+                    self.token_types.append(tokenized_entry['token_type_ids'])
 
-            assert len(input_ids) == len(aligned_aspect) == len(tokenized_entry['attention_mask']) == len(tokenized_entry['token_type_ids']) == len(aligned_polarity)
-            assert input_ids[0] == self.lang.cls_token_id and input_ids[-1] == self.lang.sep_token_id
-            for pol in asp_pol_index:
-                if pol[0] == pol[1]:
-                    assert aligned_aspect[pol[0]] == self.lang.aspect2id['S'] and aligned_aspect[pol[1]] == self.lang.aspect2id['S']
-                else:
-                    assert pol[0] < pol[1]
-                    assert aligned_aspect[pol[0]] == self.lang.aspect2id['B'] and aligned_aspect[pol[1]] == self.lang.aspect2id['E']
-                    if pol[1] - pol[0] >> 1:
-                        for asp_id in aligned_aspect[pol[0] + 1: pol[1] - 1]:
-                            assert asp_id == self.lang.aspect2id['I']
-
-        return utt_ids, asp_ids, pol_ids, asp_pol_ids, asp_pol_indexes, attention_masks, token_types
     
     def align_tags(self, aspect_tags, pol_tags, words, input_ids):
         # Align aspects and polarities to the tokenized sentence
-
+        
         aligned_aspect = ['O'] * len(input_ids)  # Default 'O' for all tokens (inputids has cls and sep)
         asp_pol_indexes = []
 
@@ -384,17 +328,6 @@ class Dataset(data.Dataset):
         return len(self.utt_ids)
 
     def __getitem__(self, idx):
-        if self.print_sample < PRINTABLE and INFO_ENABLED:
-            print('----------------------------- Sample ', idx, '-----------------------------')
-            print('- Sent Ids         :', self.utt_ids[idx])
-            print('- Aspects ids      :', self.asp_ids[idx])
-            print('- Polarities       :', self.pol_ids[idx])
-            print('- asp_pol_ids      :', self.asp_pol_ids[idx])
-            print('- asp_pol_ids_dec  :', self.lang.decode_asppol(self.asp_pol_ids[idx]))
-            print('- Asp. Pol. Indexes:', self.asp_pol_indexes[idx])
-            print('- Attention mask   :', self.attention_masks[idx])
-            print('- Token type ids   :', self.token_types[idx])
-            self.print_sample += 1
         sample =  {
             'text': torch.tensor(self.utt_ids[idx]),
             'aspects': torch.tensor(self.asp_ids[idx]),

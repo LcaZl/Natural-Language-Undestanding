@@ -75,7 +75,7 @@ if __name__ == "__main__":
                                              ngram_order)
     
     # 4 - Train and test NLTK StupidBackoff
-    alpha = 0.4 # Also for my stupid backoff
+    alpha = 0.4
     lm_sb = train_model('StupidBackoff', 
                         training_set, 
                         ngram_order,
@@ -88,7 +88,7 @@ if __name__ == "__main__":
                                           ngram_order)
 
     # 5 - Train and test my StupidBackoff implementation
-    alpha = 0.8
+    alpha = 0.4
     lm_mysb = train_model('MyStupidBackoff',
                             training_set, 
                             ngram_order,

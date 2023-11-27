@@ -46,6 +46,7 @@ if __name__ == "__main__":
                 all_stats = pd.concat([all_stats, stats], ignore_index = False)
                 all_frequency = pd.concat([all_frequency, freq_list])
                 iteration += 1
+                
     # Show final results
     print(f'\n------ Corpus, Lexicon and frequency list information for each configuration ------\n')
     print('-> Index structure: <LIBrary, Stop Words Set, Frequency List Method>')
