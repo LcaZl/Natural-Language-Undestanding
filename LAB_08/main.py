@@ -12,7 +12,6 @@ Same test set for all the experiments, you can use K-fold validation
     Evaluate Lesk Original and Graph-based (Lesk Similarity or Pedersen) metrics on the same test split and compare
 
 """
-# Import everything from functions.py file
 from functions import *
 
 if __name__ == "__main__":
@@ -23,26 +22,26 @@ if __name__ == "__main__":
     # - context: phrase in which the word appear. (each word is a tuple (word, Pos Tag)) (pos tag -> type of word (noun, verb, ecc))
     # - sense: sense of the word in the context
 
-    from nltk.corpus import senseval
-    from nltk.corpus.reader.senseval import *
-
     wsd_dataset = senseval.instances('interest.pos')
-
+    dataset_info(wsd_dataset)
+    
     # Generating features
     print(f'\nGenerating features ...')
+
     windows = [1,2,3]
     ngrams = [1,2,3]
 
     labels = get_labels(wsd_dataset)
     bow_vector = bow_features(wsd_dataset)
-    labColFeats_vector = lab_collocational_features(wsd_dataset)
+
+    collocational_feat_vect = lab_collocational_features(wsd_dataset)
     postag_vectors = { f'postag_[-{w},+{w}]' : pos_tag_features(wsd_dataset, w) for w in windows}
     ngram_vectors = { f'ngram_[-{w},+{w}]_n{n}' : ngram_features(wsd_dataset, w, n) for w in windows for n in ngrams}
 
     print('Features generated.')
     
     # Features check
-    feats_check = check_features([{'Context' : bow_vector}, {'Lab':labColFeats_vector}, postag_vectors, ngram_vectors])
+    feats_check = check_features([{'Context' : bow_vector}, {'Lab':collocational_feat_vect}, postag_vectors, ngram_vectors])
     print(f'\n-> Feature sanity check status: {feats_check}\n')
     if not feats_check:
         print('Feature check not passed. Exiting.\n')
@@ -55,11 +54,11 @@ if __name__ == "__main__":
 
     # Training as in lab_08 - Only collocational features
     print(' -> Training with fixed collocational features ...')
-    experiments.append(train_model(labColFeats_vector, labels, features_id = f'Fixed collocational'))
+    experiments.append(train_model(collocational_feat_vect, labels, features_id = f'Fixed collocational'))
 
     # Training as in lab_08 - collocational and BOW features
     print(' -> Training with BOW and fixed collocational features ...')
-    curr_features = concatenate_feature_vectors([bow_vector, labColFeats_vector])
+    curr_features = concatenate_feature_vectors([bow_vector, collocational_feat_vect])
     experiments.append(train_model(curr_features, labels, features_id = f'BOW and collocational Features'))
 
     # Training using only BOW features

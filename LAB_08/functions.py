@@ -17,6 +17,9 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.feature_extraction import DictVectorizer
 from scipy.sparse import csr_matrix
 
+from nltk.corpus import senseval
+from nltk.corpus.reader.senseval import *
+
 def get_labels(dataset):
     """
     Encodes the first sense label of each instance in the dataset into integer format.
@@ -233,7 +236,7 @@ def wsd_evaluation(dataset, algorithm):
     Evaluates different Word Sense Disambiguation (WSD) algorithms.
     
     Parameters:
-    - dataset: list of instances (context, word, position, sense
+    - dataset: list of instances (context, word, position, sense)
     - algorithm: identifier of the WSD algorithm to be used
     
     Returns:
@@ -297,7 +300,7 @@ def dataset_info(dataset):
     print(f'Dataset info:')
     print(f' - Size: {len(dataset)}')
 
-    print(f'\nSenseval instance info:')
+    print(f'Senseval instance info:')
     print(f' - Senseval instance position:', dataset[0].position)
     print(f' - Senseval instance context:\n', dataset[0].context)
     print(f' - Senseval instance sense:', dataset[0].senses)

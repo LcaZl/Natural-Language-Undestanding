@@ -4,20 +4,19 @@ This file contains the code for Lesk Simplified, Lesk Original, Lesk Similarity 
 All the code is imported from the solution notebook of laboratory 8.
 """
 
-import nltk
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
 
-nltk.download('averaged_perceptron_tagger')
+import nltk
+from nltk.stem import WordNetLemmatizer
+from nltk.corpus import stopwords
 from nltk.corpus import wordnet
 from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
+from nltk.corpus import wordnet_ic
 from collections import Counter
 
 nltk.download('wordnet_ic')
 nltk.download('wordnet')
 nltk.download('senseval')
-from nltk.corpus import wordnet_ic
+nltk.download('averaged_perceptron_tagger')
 
 semcor_ic = wordnet_ic.ic('ic-semcor.dat')
 
