@@ -1,22 +1,6 @@
-# Add functions or classes used for data loading and preprocessing
-import json
-from pprint import pprint
-from collections import Counter
-import torch
-import torch.utils.data as data
-from sklearn.model_selection import train_test_split
-from transformers import BertTokenizer
-
-PAD_TOKEN = 0
-UNK_TOKEN = 1
-BERT_MAX_LEN = 512
-DEVICE = 'cuda:0'
+from functions import *
 
 def load_data(path):
-    '''
-        input: path/to/data
-        output: json
-    '''
     dataset = []
     with open(path) as f:
         dataset = json.loads(f.read())
@@ -80,8 +64,6 @@ class Lang():
         self.id2slot = {v: k for k, v in self.slot2id.items()}
 
     def lab2id(self, elements, include_special_token = False):
-        """Convert list of labels to a dictionary mapping."""
-
         vocab = {}
         if (include_special_token):
             vocab['[PAD]'] = PAD_TOKEN
@@ -93,7 +75,6 @@ class Lang():
 
         return vocab
 
-TESTING = False
 class IntentsAndSlots(data.Dataset):
 
     def __init__(self, dataset, lang):
@@ -120,15 +101,15 @@ class IntentsAndSlots(data.Dataset):
             # Tokenization
             tokenized_entry = self.lang.tokenizer(entry['utterance'])
             input_ids = tokenized_entry['input_ids']
-            """         
-            print('----------------------------- Sample ', i, '-----------------------------')
-            print('- Entry - Phrase:', entry['utterance'])
-            print('-     Intent    :', entry['intent'])
-            print('-    input_ids  :', input_ids)
-            print('- Attention mask:', tokenized_entry['attention_mask'])
-            print('- Token type ids:',tokenized_entry['token_type_ids'])
-            print('-      Slots    :', entry['slots'])
-            """
+            if INFO_ENABLED:
+                print('----------------------------- Sample ', i, '-----------------------------')
+                print('- Entry - Phrase:', entry['utterance'])
+                print('-     Intent    :', entry['intent'])
+                print('-    input_ids  :', input_ids)
+                print('- Attention mask:', tokenized_entry['attention_mask'])
+                print('- Token type ids:',tokenized_entry['token_type_ids'])
+                print('-      Slots    :', entry['slots'])
+
             # Aligning slot labels with tokens
             aligned_slot_ids = self.align_slots(entry['slots'].split(), entry['utterance'].split())
 
@@ -150,7 +131,7 @@ class IntentsAndSlots(data.Dataset):
     
     def align_slots(self, slot_labels, utterance_words):
         aligned_slots = [self.lang.slot2id['O']]
-        #bert_tokenize_phrase = [] # Only for print
+        bert_tokenize_phrase = [] # Only for print
 
         slot_pointer = 0
         
@@ -164,13 +145,14 @@ class IntentsAndSlots(data.Dataset):
                 else:
                     slot_id = self.lang.slot2id.get(base_label.replace('PREFIX', 'I-'), UNK_TOKEN)
                 aligned_slots.append(slot_id)
-                #bert_tokenize_phrase.append(tok)
+                bert_tokenize_phrase.append(tok)
             slot_pointer += 1
 
         aligned_slots.append(self.lang.slot2id['O'])
 
-        #print('-  Bert Tokens  :', bert_tokenize_phrase)
-        #print('- Aligned Slots :', str(aligned_slots))
+        if INFO_ENABLED:    
+            print('-  Bert Tokens  :', bert_tokenize_phrase)
+            print('- Aligned Slots :', str(aligned_slots))
 
         return aligned_slots
 
@@ -228,6 +210,7 @@ def collate_fn(data):
     new_item["attention_mask"] = attention_mask
     new_item['token_type_ids'] = token_type_ids
 
-    #sample = {'utterances': src_utt.shape, 'slots_len': y_lengths.shape, 'intents': intent.shape, 'yslots':y_slots.shape, 'attention_mask':new_item["attention_mask"].shape}
-    #print('-   Collate_fn :', sample)
+    if INFO_ENABLED:
+        sample = {'utterances': src_utt.shape, 'slots_len': y_lengths.shape, 'intents': intent.shape, 'yslots':y_slots.shape, 'attention_mask':new_item["attention_mask"].shape}
+        print('-   Collate_fn :', sample)
     return new_item

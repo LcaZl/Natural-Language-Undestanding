@@ -1,51 +1,50 @@
-# Add the class of your model only
-# Here is where you define the architecture of your model using pytorch
-import pandas as pd
-import os
+import nltk
+from nltk.stem import WordNetLemmatizer
+from nltk.sentiment.util import mark_negation
+from nltk.corpus import subjectivity
+from nltk.corpus import movie_reviews
+from transformers import BertModel
+from transformers import BertTokenizer
+
+import torch
+import torch.nn as nn
 import torch.optim as optim
-from tqdm import tqdm
+from torch.utils.data import DataLoader
+import torch.utils.data as data
+
+import pandas as pd
 import numpy as np
-import math
-from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import classification_report
-from tabulate import tabulate
-import torch.nn.init as init
-from itertools import product
+import os
 import json
+from word2number import w2n
+from itertools import product
+import math
 import matplotlib.pyplot as plt
+from tqdm import tqdm
+from tabulate import tabulate
+from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.metrics import classification_report
+
+nltk.download('subjectivity')
+nltk.download('movie_reviews')
+
+PAD_TOKEN = 0
+BERT_MAX_LEN = 512
+TOKENIZER = BertTokenizer.from_pretrained('bert-base-uncased')
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+DEVICE = 'cuda:0'
+INFO_ENABLED = False
+TESTING = False
+REMOVE_CLASS = 'obj'
 
 from utils import *
 from model import *
 
-REMOVE_CLASS = 'obj'
-
-def get_scores(reports):
-    df_runs = pd.DataFrame(columns=['Fold', 'Run', 'F1-score', 'F1 std.', 'Accuracy', 'Accuracy std.'])
-    fs, accs = [], []
-
-    for [fold, run, f, acc] in reports:
-        fs.append(f)
-        accs.append(acc)
-        df_runs.loc[len(df_runs)] = [fold ,run, f, 0, acc, 0]
-    
-    df_runs = df_runs.round(4)
-
-    df_folds = df_runs.groupby('Fold').agg({
-        'F1-score': ['mean', 'std'],
-        'Accuracy': ['mean', 'std']
-    }).reset_index()
-    df_folds.columns = ['Fold', 'F1-score Mean', 'F1-score Std', 'Accuracy Mean', 'Accuracy Std']
-
-    df_folds = df_folds.round(4)
-    return df_runs, df_folds
-
-def train_model(parameters):
+def experiment(parameters):
 
     print(f'\nStart Training:')
     print(f'\n-------- ',parameters['task'],' --------\n')
     print('Parameters:\n')
-
-    # Print parameters
     for key, value in parameters.items():
         if not key in ['train_folds', 'test_loader']:
             print(f' - {key}: {value}')
@@ -96,6 +95,15 @@ def init_model(parameters, model_state = None):
                             lr=parameters['learning_rate'])
 
     return model, optimizer
+
+def evaluation(model, parameters, dataset):
+
+    losses, report = eval_loop(dataset, model, parameters)
+    f = round(report['macro avg']['f1-score'], 4)
+    acc = round(report['accuracy'], 4)
+    score = round(f, 4)
+    report = [f, acc]
+    return losses, score, report
 
 def train_lm(parameters):
     cols = ['Fold','Run','F1-score', 'Accuracy']
@@ -153,6 +161,7 @@ def train_lm(parameters):
                 best_score = score
                 best_model = (model, report)
 
+        # Current fold report
         fold_df = pd.DataFrame(fold_reports, columns=cols).set_index('Fold')
         print(tabulate(fold_df, headers='keys', tablefmt='grid', showindex=True))
         print(best_model[1])
@@ -179,15 +188,6 @@ def train_loop(data_loader, optimizer, model, parameters):
         optimizer.step()
 
     return losses
-
-def evaluation(model, parameters, dataset):
-
-    losses, report = eval_loop(dataset, model, parameters)
-    f = round(report['macro avg']['f1-score'], 4)
-    acc = round(report['accuracy'], 4)
-    score = round(f, 4)
-    report = [f, acc]
-    return losses, score, report
 
 def eval_loop(data_loader, model, parameters):
     model.eval()
@@ -234,16 +234,37 @@ def create_subj_filter(dataset, model, subj_lang, filename='subj_filter.json'):
             
             for i in range(sample['text'].size(0)):
                 if subj_lang.id2class[subjective_mask.tolist()[i]] == REMOVE_CLASS:
-                    # Rimuovi CLS, SEP e padding
+                    # Remove padding
                     text_ids = sample['text'][i].tolist()
                     clean_text_ids = [id for id in text_ids if id != PAD_TOKEN]
                     filter.append(clean_text_ids)
 
-    # Salva il filtro nel file
+    # Save the filter
     with open(filename, 'w') as file:
         json.dump(filter, file)
 
     return filter
+
+# Used only for outputs
+def get_scores(reports):
+    df_runs = pd.DataFrame(columns=['Fold', 'Run', 'F1-score', 'F1 std.', 'Accuracy', 'Accuracy std.'])
+    fs, accs = [], []
+
+    for [fold, run, f, acc] in reports:
+        fs.append(f)
+        accs.append(acc)
+        df_runs.loc[len(df_runs)] = [fold ,run, f, 0, acc, 0]
+    
+    df_runs = df_runs.round(4)
+
+    df_folds = df_runs.groupby('Fold').agg({
+        'F1-score': ['mean', 'std'],
+        'Accuracy': ['mean', 'std']
+    }).reset_index()
+    df_folds.columns = ['Fold', 'F1-score Mean', 'F1-score Std', 'Accuracy Mean', 'Accuracy Std']
+
+    df_folds = df_folds.round(4)
+    return df_runs, df_folds
 
 def plot_aligned_losses(training_losses, dev_losses, title):
     step = len(training_losses) / len(dev_losses)

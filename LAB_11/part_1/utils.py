@@ -1,44 +1,14 @@
-import nltk
-import torch
-import torch.utils.data as data
-import math
-from nltk.stem import WordNetLemmatizer
-from word2number import w2n
 
-from nltk.sentiment.util import mark_negation
-from nltk.lm.preprocessing import flatten
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-from sklearn.model_selection import train_test_split
-from transformers import BertTokenizer
-from tqdm import tqdm
+from functions import *
 
-nltk.download('subjectivity')
-nltk.download('stopwords')
-nltk.download('punkt')
-nltk.download('movie_reviews')
-nltk.download('vader_lexicon')
-nltk.download('wordnet')
-from nltk.corpus import subjectivity
-from nltk.corpus import movie_reviews
-from nltk.corpus import stopwords
-from nltk.sentiment import SentimentIntensityAnalyzer
-sia = SentimentIntensityAnalyzer()
-
-PAD_TOKEN = 0
-BERT_MAX_LEN = 512
-TOKENIZER = BertTokenizer.from_pretrained('bert-base-uncased')
-DEVICE = 'cuda:0'
-INFO_ENABLED = False
-TESTING = False
 
 def preprocess(dataset, label, mark_neg = True):
     new_dataset = []
 
     def chunk_sequence(sequence):
         return [sequence[i:i + BERT_MAX_LEN] for i in range(0, len(sequence), BERT_MAX_LEN)]
+    
     maxlen = 0
-
     for tokens in tqdm(dataset[:int(len(dataset)/40) if TESTING else len(dataset)], desc = 'Preprocessing dataset'):
         text = ' '.join(tokens)
 
@@ -82,8 +52,6 @@ def filter_movie_reviews(filter):
     mr = movie_reviews
     new_mr = {}
     categories = mr.categories()
-
-    #filter = set([' '.join(sentence) for sentence in filter])
 
     print(' - Filter size:', len(filter))
     print(' - Movie review pos sent:', len(movie_reviews.sents(categories = 'pos')))
@@ -156,6 +124,7 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = [], tr_batch = 64,
     train_labels = [label for _, _, label in train_sentences]
     fold_datasets = []
     
+    # Creating folds
     for k, (train_indices, val_indices) in enumerate(kfold.split(train_sentences, train_labels)):
 
         train_samples = [train_sentences[i] for i in train_indices]
@@ -169,18 +138,18 @@ def load_dataset(dataset_name, kfold, test_size = 0.1, args = [], tr_batch = 64,
         val_loader = DataLoader(val_dataset, batch_size = vl_batch, shuffle = True, collate_fn = collate_fn)
         fold_datasets.append((train_loader, val_loader))
 
-    print(f' - TEST SET - Size: {len(test_sentences)}')
     test_dataset = Dataset(test_sentences, lang)
     test_loader = DataLoader(test_dataset, batch_size = tr_batch, shuffle = True, collate_fn = collate_fn)
 
     # Info
+    print(f' - TEST SET - Size: {len(test_sentences)}')
+    print(' - Classes label ids:',lang.class2id)
     print(' - Vocabulary size:', lang.vocab_size)
     print(' - Group ',grp1_sentences[0][2],' - First sent len:', len(grp1_sentences[0][0]), )
     print(' - Group ',grp2_sentences[0][2],' - First sent len:', len(grp2_sentences[0][0]), )
     print(f'{dataset_name} folds (', len(fold_datasets), '):')
     for k, fold in enumerate(fold_datasets):
         print('- Fold',k,' dim -> Train:',len(fold[0]), 'Dev:', len(fold[1]))
-
     print(' - Sample:', train_dataset[0])
     print('Datasets loaded!\n')
 
@@ -199,7 +168,6 @@ class Lang:
             self.class2id[cls] = i
 
         self.id2class = {i:c for c, i in self.class2id.items()}
-        print(' - Classes label ids:',self.class2id)
 
     def encode(self, sentence):
         return self.tokenizer.encode(sentence)
@@ -266,7 +234,8 @@ def collate_fn(batch):
     new_item['text'] = source.to(DEVICE)
     new_item['labels'] = torch.tensor(new_item['label']).to(DEVICE)
     new_item['attention_masks'] = attention_masks.to(DEVICE)
-    #if INFO_ENABLED:
-        #print('COLLATEFN:',new_item['text'].shape.shape, new_item['labels'].shape, new_item['lengths'].shape) # , new_item['vlabels']
+
+    if INFO_ENABLED:
+        print('COLLATEFN:',new_item['text'].shape.shape, new_item['labels'].shape, new_item['lengths'].shape) # , new_item['vlabels']
     return new_item
 

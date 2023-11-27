@@ -20,6 +20,7 @@ from evals import *
 # Parameters
 PAD_TOKEN = 0
 DEVICE = 'cuda:0'
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 TRAIN_PATH = 'dataset/laptop14_train.txt'
 TEST_PATH = 'dataset/laptop14_test.txt'
 INFO_ENABLED = False

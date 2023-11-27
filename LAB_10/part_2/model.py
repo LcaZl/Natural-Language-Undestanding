@@ -1,7 +1,4 @@
-from transformers import BertTokenizer, BertModel
-import torch.nn as nn
-from torchcrf import CRF
-import torch
+from functions import *
 
 class IntentClassifier(nn.Module):
     def __init__(self, input_dim, num_intent_labels, dropout_rate=0.1):
@@ -40,6 +37,7 @@ class jointBERT(nn.Module):
             self.crf = CRF(out_slot, batch_first=True)
 
     def forward(self, input_ids, attention_mask, token_type_ids):
+        
         outputs = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)  
         sequence_output = outputs[0]
         pooled_output = outputs[1]  # [CLS]

@@ -1,8 +1,6 @@
 
 import random
 import numpy as np
-from sklearn.model_selection import train_test_split
-from collections import Counter
 import os
 import torch.optim as optim
 from conll import evaluate
@@ -14,21 +12,26 @@ import pandas as pd
 from tabulate import tabulate
 import math
 
+import json
+from pprint import pprint
+from collections import Counter
+import torch
+import torch.utils.data as data
+from sklearn.model_selection import train_test_split
+from transformers import BertTokenizer, BertModel
+import torch.nn as nn
+from torchcrf import CRF
+
+PAD_TOKEN = 0
+UNK_TOKEN = 1
+BERT_MAX_LEN = 512
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+DEVICE = 'cuda:0'
+TESTING = True
+INFO_ENABLED = False
+
 from utils import *
 from model import *
-def get_scores(reports, experiment_id):
-    df = pd.DataFrame(columns=['Experiment ID','Intent accuracy', 'Accuracy std.', 'Slot F1 score', 'F1 std.'])
-
-    slot_f1, intent_acc = [], []
-
-    for [run, slot_report, intent_report] in reports:
-        slot_f1.append(slot_report['total']['f'])
-        intent_acc.append(intent_report['accuracy'])
-        df.loc[len(df)] = [f'{experiment_id}_run_{run + 1}', slot_report['total']['f'], 0, intent_report['accuracy'], 0]
-    df.loc[len(df)] = [f'{experiment_id}_avg', np.mean(slot_f1), np.std(slot_f1), np.mean(intent_acc), np.std(intent_acc)]
-    df = df.round(4)
-
-    return df
 
 def init_model(parameters, model_state = None):
 
@@ -43,7 +46,7 @@ def init_model(parameters, model_state = None):
 
     return model, optimizer
 
-def execute_experiment(exp_id, parameters):
+def experiment(exp_id, parameters):
         
     # Current experiment information
     print(f'\n-------- {exp_id} --------\n')
@@ -133,6 +136,24 @@ def train_lm(parameters):
 
     return best_model, reports, (train_losses, dev_losses)
 
+def aggregate_loss(model, parameters, sample, intent_logits, slot_logits):
+    
+    # Intent Loss
+    intent_loss = parameters['criterion_intents'](intent_logits.view(-1, parameters['num_intent_labels']), sample['intents'].view(-1))
+    
+    # Slot Loss
+    if (parameters['use_crf']):
+        slot_loss = -1 * model.crf(slot_logits, sample['y_slots'], mask=sample['attention_mask'].bool(), reduction='mean')
+    else:
+        active_loss = sample['attention_mask'].view(-1) == 1
+        active_logits = slot_logits.view(-1, parameters['num_slot_labels'])[active_loss]
+        active_labels = sample['y_slots'].view(-1)[active_loss]
+        slot_loss = parameters['criterion_slots'](active_logits, active_labels)
+
+    # Total Loss
+    total_loss = intent_loss + slot_loss
+    return total_loss
+        
 def train_loop(data, optimizer, model, parameters):
                
     model.train()
@@ -142,29 +163,17 @@ def train_loop(data, optimizer, model, parameters):
         optimizer.zero_grad() # Zeroing the gradient
         intent_logits, slot_logits = model(sample['utterances'], sample['attention_mask'], sample['token_type_ids'])
 
-        #print('- Sample & forward output:')
-        #print("-    Intents   :", sample['intents'].shape)      
-        #print("-   Utterances :", sample['utterances'].shape)
-        #print("-   Att. Mask  :", sample['attention_mask'].shape)
-        #print("-    Y Slots   :", sample['y_slots'].shape)
-        #print("-   Slots Len  :", sample['slots_len'].shape)
-        #print("- Intent logits:", intent_logits.shape)
-        #print('-  Slot logits :', slot_logits.shape)
+        if INFO_ENABLED:
+            print('- Sample & forward output:')
+            print("-    Intents   :", sample['intents'].shape)      
+            print("-   Utterances :", sample['utterances'].shape)
+            print("-   Att. Mask  :", sample['attention_mask'].shape)
+            print("-    Y Slots   :", sample['y_slots'].shape)
+            print("-   Slots Len  :", sample['slots_len'].shape)
+            print("- Intent logits:", intent_logits.shape)
+            print('-  Slot logits :', slot_logits.shape)
 
-        # 1. Intent Loss
-        intent_loss = parameters['criterion_intents'](intent_logits.view(-1, parameters['num_intent_labels']), sample['intents'].view(-1))
-        
-        # 2. Slot Loss
-        if (parameters['use_crf']):
-            slot_loss = -1 * model.crf(slot_logits, sample['y_slots'], mask=sample['attention_mask'].bool(), reduction='mean')
-        else:
-            active_loss = sample['attention_mask'].view(-1) == 1
-            active_logits = slot_logits.view(-1, parameters['num_slot_labels'])[active_loss]
-            active_labels = sample['y_slots'].view(-1)[active_loss]
-            slot_loss = parameters['criterion_slots'](active_logits, active_labels)
-
-        # 3. Total Loss
-        total_loss = intent_loss + slot_loss
+        total_loss = aggregate_loss(model, parameters, sample, intent_logits, slot_logits)
         losses.append(total_loss.item())
 
         total_loss.backward()
@@ -190,20 +199,7 @@ def eval_loop(data, model, parameters):
 
             intent_logits, slot_logits = model(sample['utterances'], sample['attention_mask'], sample['token_type_ids'])
 
-            # 1. Intent Loss
-            intent_loss = parameters['criterion_intents'](intent_logits.view(-1, parameters['num_intent_labels']), sample['intents'].view(-1))
-
-            # 2. Slot Loss
-            if (parameters['use_crf']):
-                slot_loss = -1 * model.crf(slot_logits, sample['y_slots'], mask=sample['attention_mask'].bool(), reduction='mean')
-            else:
-                active_loss = sample['attention_mask'].view(-1) == 1
-                active_logits = slot_logits.view(-1, parameters['num_slot_labels'])[active_loss]
-                active_labels = sample['y_slots'].view(-1)[active_loss]
-                slot_loss = parameters['criterion_slots'](active_logits, active_labels)      
-
-            # 3. Total Loss
-            total_loss = intent_loss + slot_loss
+            total_loss = aggregate_loss(model, parameters, sample, intent_logits, slot_logits)
             losses.append(total_loss.item())
 
             # Intent inference
@@ -219,6 +215,7 @@ def eval_loop(data, model, parameters):
                 output_slots = torch.argmax(slot_logits, dim=2).tolist()
 
             for id_seq, seq in enumerate(output_slots):
+                
                 length = sample['slots_len'].tolist()[id_seq] - 1
                 utt_ids = sample['utterance'][id_seq][1:length].tolist()
                 gt_ids = sample['y_slots'][id_seq][1:length].tolist()
@@ -244,21 +241,36 @@ def eval_loop(data, model, parameters):
         hyp_s = set([x[1] for x in hyp_slots])
         report_slot = {'accuracy':0, 'total': {'f':0}}
         print('Class not in ref:', ref_s.difference(hyp_s),  hyp_s.difference(ref_s))
-        print(' - utt_ids',utt_ids)
-        print(' - gt_ids',gt_ids)
-        print(' - gt_slots',gt_slots)
-        print(' - utterance',utterance)
-        print(' - to_decode',to_decode)
-        print(' - ref_s',ref_s)
-        print(' - hyp_s',hyp_s)
-        print(ex)
-        exit(0)
+        if INFO_ENABLED:
+            print(' - utt_ids',utt_ids)
+            print(' - gt_ids',gt_ids)
+            print(' - gt_slots',gt_slots)
+            print(' - utterance',utterance)
+            print(' - to_decode',to_decode)
+            print(' - ref_s',ref_s)
+            print(' - hyp_s',hyp_s)
+            print(ex)
+            exit(0)
         
     report_intent = classification_report(ref_intents, hyp_intents,
                                           zero_division=False, output_dict=True)
     
     return report_slot, report_intent, losses
 
+# Functions for output
+def get_scores(reports, experiment_id):
+    df = pd.DataFrame(columns=['Experiment ID','Intent accuracy', 'Accuracy std.', 'Slot F1 score', 'F1 std.'])
+
+    slot_f1, intent_acc = [], []
+
+    for [run, slot_report, intent_report] in reports:
+        slot_f1.append(slot_report['total']['f'])
+        intent_acc.append(intent_report['accuracy'])
+        df.loc[len(df)] = [f'{experiment_id}_run_{run + 1}', slot_report['total']['f'], 0, intent_report['accuracy'], 0]
+    df.loc[len(df)] = [f'{experiment_id}_avg', np.mean(slot_f1), np.std(slot_f1), np.mean(intent_acc), np.std(intent_acc)]
+    df = df.round(4)
+
+    return df
 
 def plot_aligned_losses(training_losses, dev_losses, title):
     step = len(training_losses) / len(dev_losses)
