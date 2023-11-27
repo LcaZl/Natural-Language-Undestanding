@@ -1,4 +1,12 @@
 from functions import *
+TRAIN_PATH = 'dataset/laptop14_train.txt'
+TEST_PATH = 'dataset/laptop14_test.txt'
+TESTING = False
+PAD_TOKEN = 0
+DEVICE = 'cuda:0'
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+INFO_ENABLED = False
+BERT_MAX_LEN = 512
 
 def read_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:

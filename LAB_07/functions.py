@@ -40,7 +40,9 @@ def process_data(set, configuration, name):
         dict: dictionary containing dataset with features setted, the labels and the "raw" dataset sentences.
     """
     print(f'Setting features and labels for {name} ...')
-    features = extract_features(set, configuration)
+    extractor = FeatureExtractor()
+
+    features = extractor.extract_features(set, configuration)
 
     # set2label (sent2label)
     label = [[label for _, label in sent] for sent in set]
@@ -80,20 +82,6 @@ def feature_selection(train_set, test_set, features_conf):
     print(f' - First test token label: {test_set["Labels"][0][0]}')
 
     return training_set, test_set
-
-def extract_features(set, configuration):
-    """
-    using FeatureExtractor object obtain the features accordingly to the provided configuration label.
-    
-    Args:
-        set (list): dataset
-        configuration (dict): configuration label for feature extraction
-    
-    Returns:
-        list: dataset with features requested
-    """
-    extractor = FeatureExtractor()
-    return extractor.extract_features(set, configuration)
     
 def train_crf(train_set):
     """

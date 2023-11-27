@@ -28,13 +28,6 @@ from sklearn.metrics import classification_report
 nltk.download('subjectivity')
 nltk.download('movie_reviews')
 
-PAD_TOKEN = 0
-BERT_MAX_LEN = 512
-TOKENIZER = BertTokenizer.from_pretrained('bert-base-uncased')
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-DEVICE = 'cuda:0'
-INFO_ENABLED = False
-TESTING = False
 REMOVE_CLASS = 'obj'
 
 from utils import *

@@ -1,6 +1,12 @@
 
 from functions import *
-
+PAD_TOKEN = 0
+BERT_MAX_LEN = 512
+TOKENIZER = BertTokenizer.from_pretrained('bert-base-uncased')
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+DEVICE = 'cuda:0'
+INFO_ENABLED = False
+TESTING = False
 
 def preprocess(dataset, label, mark_neg = True):
     new_dataset = []

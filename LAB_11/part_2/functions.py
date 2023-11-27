@@ -17,16 +17,6 @@ from tabulate import tabulate
 from sklearn.model_selection import StratifiedKFold
 from evals import *
 
-# Parameters
-PAD_TOKEN = 0
-DEVICE = 'cuda:0'
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-TRAIN_PATH = 'dataset/laptop14_train.txt'
-TEST_PATH = 'dataset/laptop14_test.txt'
-INFO_ENABLED = False
-BERT_MAX_LEN = 512
-TESTING = True
-
 from model import *
 from utils import *
 
