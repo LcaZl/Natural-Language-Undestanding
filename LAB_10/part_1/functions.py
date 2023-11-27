@@ -1,53 +1,33 @@
 # Add the class of your model only
 # Here is where you define the architecture of your model using pytorch
 
-
-import random
 import numpy as np
-from sklearn.model_selection import train_test_split
-from collections import Counter
 import os
 import torch.optim as optim
 from conll import evaluate
 from sklearn.metrics import classification_report
 from tqdm import tqdm 
 import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
 import pandas as pd
 from tabulate import tabulate
+
+import json
+from pprint import pprint
+from collections import Counter
+import torch
+import torch.utils.data as data
+from torch.utils.data import DataLoader
+from sklearn.model_selection import train_test_split
+
+import torch.nn as nn
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+
+PAD_TOKEN = 0
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+DEVICE = 'cuda:0'
+
 from utils import *
 from model import *
-
-def get_scores(reports, experiment_id):
-    df = pd.DataFrame(columns=['Experiment ID','Intent accuracy', 'Accuracy std.', 'Slot F1 score', 'F1 std.'])
-
-    slot_f1, intent_acc = [], []
-
-    for [run, slot_report, intent_report] in reports:
-        slot_f1.append(slot_report['total']['f'])
-        intent_acc.append(intent_report['accuracy'])
-        df.loc[len(df)] = [f'{experiment_id}_run_{run + 1}', slot_report['total']['f'], 0, intent_report['accuracy'], 0]
-    df.loc[len(df)] = [f'{experiment_id}_avg', np.mean(slot_f1), np.std(slot_f1), np.mean(intent_acc), np.std(intent_acc)]
-    df = df.round(4)
-
-    return df
-
-def init_model(parameters, model_state = None):
-    optimizer = None
-    model = ModelIAS(hid_size = parameters['hidden_layer_size'], 
-                                emb_size = parameters['embedded_layer_size'], 
-                                out_slot = parameters['output_slots'], 
-                                out_int = parameters['output_intent'], 
-                                vocab_len = parameters['vocabulary_size'], 
-                                pad_index = PAD_TOKEN).to(DEVICE)
-
-    if model_state:
-        model.load_state_dict(model_state)
-    else:
-        model.apply(init_weights)
-        optimizer = optim.Adam(model.parameters(), lr = parameters['learning_rate'])
-
-    return model, optimizer
 
 def execute_experiment(exp_id, parameters):
 
@@ -137,6 +117,7 @@ def train_lm(parameters):
             
     return best_model, reports, (train_losses, dev_losses)
 
+
 def init_weights(mat):
     for m in mat.modules():
         if type(m) in [nn.GRU, nn.LSTM, nn.RNN]:
@@ -157,7 +138,21 @@ def init_weights(mat):
                 if m.bias != None:
                     m.bias.data.fill_(0.01)
 
+def init_model(parameters, model_state = None):
+    optimizer = None
+    model = ModelIAS(hid_size = parameters['hidden_layer_size'], 
+                                emb_size = parameters['embedded_layer_size'], 
+                                out_slot = parameters['output_slots'], 
+                                out_int = parameters['output_intent'], 
+                                vocab_len = parameters['vocabulary_size']).to(DEVICE)
 
+    if model_state:
+        model.load_state_dict(model_state)
+    else:
+        model.apply(init_weights)
+        optimizer = optim.Adam(model.parameters(), lr = parameters['learning_rate'])
+
+    return model, optimizer
 
 def train_loop(parameters, optimizer, model):
     model.train()
@@ -174,7 +169,7 @@ def train_loop(parameters, optimizer, model):
         losses.append(loss.item())
         loss.backward() # Compute the gradient, deleting the computational graph
         # clip the gradient to avoid explosioning gradients
-        # torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), parameters['clip'])
         optimizer.step() # Update the weights
     return losses
 
@@ -228,6 +223,20 @@ def eval_loop(data, parameters, model):
                                           zero_division=False, output_dict=True)
     return report_slot, report_intent, losses
 
+# For outputs
+def get_scores(reports, experiment_id):
+    df = pd.DataFrame(columns=['Experiment ID','Intent accuracy', 'Accuracy std.', 'Slot F1 score', 'F1 std.'])
+
+    slot_f1, intent_acc = [], []
+
+    for [run, slot_report, intent_report] in reports:
+        slot_f1.append(slot_report['total']['f'])
+        intent_acc.append(intent_report['accuracy'])
+        df.loc[len(df)] = [f'{experiment_id}_run_{run + 1}', slot_report['total']['f'], 0, intent_report['accuracy'], 0]
+    df.loc[len(df)] = [f'{experiment_id}_avg', np.mean(slot_f1), np.std(slot_f1), np.mean(intent_acc), np.std(intent_acc)]
+    df = df.round(4)
+
+    return df
 
 def plot_aligned_losses(training_losses, dev_losses, title):
     step = len(training_losses) / len(dev_losses)

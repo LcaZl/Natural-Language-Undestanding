@@ -1,10 +1,8 @@
-import torch.nn as nn
-import torch
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from functions import *
 
 class ModelIAS(nn.Module):
 
-    def __init__(self, hid_size, out_slot, out_int, emb_size, vocab_len, n_layer=1, pad_index=0, bidirectional = False, dropout_prob = 0):
+    def __init__(self, hid_size, out_slot, out_int, emb_size, vocab_len, n_layer=1, bidirectional = False, dropout_prob = 0):
         super(ModelIAS, self).__init__()
         # hid_size = Hidden size
         # out_slot = number of slots (output size for slot filling)
@@ -14,7 +12,7 @@ class ModelIAS(nn.Module):
         self.bidirectional = bidirectional
 
         # Embedding Layer
-        self.embedding = nn.Embedding(vocab_len, emb_size, padding_idx=pad_index)
+        self.embedding = nn.Embedding(vocab_len, emb_size, padding_idx=PAD_TOKEN)
 
         # LSTM Layer
         self.utt_encoder = nn.LSTM(emb_size, hid_size, n_layer, bidirectional=bidirectional)
@@ -50,7 +48,6 @@ class ModelIAS(nn.Module):
         # Slot and Intent logits computation
         slots = self.slot_out(utt_encoded)
         intent = self.intent_out(last_hidden)
-
         slots = slots.permute(1,2,0) 
 
         return slots, intent

@@ -1,13 +1,4 @@
-# Add functions or classes used for data loading and preprocessing
-import json
-from pprint import pprint
-from collections import Counter
-import torch
-import torch.utils.data as data
-from sklearn.model_selection import train_test_split
-
-PAD_TOKEN = 0
-DEVICE = 'cuda:0'
+from functions import *
 
 def load_data(path):
     '''
@@ -80,7 +71,6 @@ def load_dataset():
 
 
 class Lang():
-
 
     def __init__(self, words, intents, slots, cutoff=0):
         self.word2id = self.w2id(words, cutoff=cutoff, unk=True)
