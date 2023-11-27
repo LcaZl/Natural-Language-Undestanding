@@ -5,16 +5,19 @@ import pandas as pd
 import math
 import copy
 import os
-import math
 import numpy as np
 from tabulate import tabulate
 from tqdm import tqdm
-
-import torch.optim as optim
-from torch.utils.data import DataLoader
-
 from functools import partial
 from sklearn.metrics.pairwise import cosine_similarity
+
+import torch
+import torch.optim as optim
+from torch.utils.data import DataLoader
+import torch.nn as nn
+import torch.utils.data as data
+
+DEVICE = 'cuda:0'
 
 from utils import *
 from model import *
@@ -38,7 +41,6 @@ def execute_experiments(experiments):
             # Current experiment information
             print(f'\n-------- {experiment_id} --------\n')
             print('Parameters:\n')
-
             for key, value in experiment_parameters.items():
                 print(f' - {key}: {value}')
 
@@ -69,7 +71,6 @@ def execute_experiments(experiments):
                 print(f'\nStart training ... \n')
                 model_score = train_lm(experiment_parameters,  model, optimizer)
 
-            
             experiment_result = pd.DataFrame(columns=cols, 
                                  data = [[experiment_id, experiment_parameters['model_name'], model_score]])
             
@@ -80,26 +81,8 @@ def execute_experiments(experiments):
         return scores
 
 def train_lm(parameters, model, optimizer):
-        """
-        Train a language model
-
-        Parameters:
-        - save_path (str): path where the model with best performance is saved
-        - n_epochs (int): maximum number of epochs to train the model
-        - patience (int): number of epochs to wait for improvement before stopping training
-        - model (torch.nn.Module): PyTorch model to train
-        - optimizer (torch.optim.Optimizer): optimizer to use during training
-        - criterion_train (torch.nn.Module): loss function used during training
-        - criterion_eval (torch.nn.Module): loss function used during evaluation
-        - train_loader (torch.utils.data.DataLoader): dataLoader for the training set
-        - dev_loader (torch.utils.data.DataLoader): dataLoader for the development set
-        - test_loader (torch.utils.data.DataLoader): dataLoader for the test set
-        - DEVICE (str or torch.DEVICE): DEVICE, "cpu" or "cuda"
-        - clip (float): value to clip gradients during training
-
-        Returns:
-        - final_ppl (float): perplexity of the best model on training set
-        """        
+# train the model in input and return the perplexity achived on the test set
+       
         best_ppl = math.inf
         best_model = None
         pbar = tqdm(range(1,parameters['n_epochs']))
@@ -113,7 +96,7 @@ def train_lm(parameters, model, optimizer):
                 if  ppl_dev < best_ppl: # the lower, the better
                     best_ppl = ppl_dev
                     best_model = copy.deepcopy(model).to('cpu')
-                    #P = parameters['patience']
+                    P = parameters['patience']
                 else:
                     P -= 1
                     

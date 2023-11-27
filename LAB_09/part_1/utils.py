@@ -1,11 +1,6 @@
 # Add functions or classes used for data loading and preprocessing
 # From LAB_09
-import torch
-import torch.utils.data as data
-import os
-
-DEVICE = 'cuda:0'
-
+from functions import *
 
 def load_dataset():
     """
@@ -57,30 +52,21 @@ def get_vocab(corpus, special_tokens=[]):
 
 class Lang():
     def __init__(self, corpus, special_tokens=[]):
-        # Durante l'inizializzazione, creiamo il vocabolario (word2id) e
-        # un dizionario inverso (id2word) per mappare indici ai rispettivi token.
-        self.word2id = self.get_vocab(corpus, special_tokens) 
-        self.id2word = {v:k for k, v in self.word2id.items()}  # Creiamo il dizionario inverso
+        self.word2id = self.get_vocab(corpus, special_tokens)
+        self.id2word = {v: k for k, v in self.word2id.items()}  # inverse dictionary
         
     def get_vocab(self, corpus, special_tokens=[]):
-        # Creiamo un dizionario vuoto che conterrà la nostra mappatura da parole (stringhe) a indici (interi).
-        output = {} 
-        i = 0 
-        # Prima aggiungiamo i token speciali al vocabolario con gli indici più bassi.
+        output = {}
+        i = 0
         for st in special_tokens:
             output[st] = i
             i += 1
-        # Iteriamo attraverso ogni frase nel corpus.
         for sentence in corpus:
-            # Iteriamo attraverso ogni parola in una frase.
             for w in sentence.split():
-                # Se la parola non è già nel vocabolario, aggiungila.
                 if w not in output:
                     output[w] = i
                     i += 1
-        # Restituisci il vocabolario costruito.
         return output
-
 
 class PennTreeBank (data.Dataset):
     # Mandatory methods are __init__, __len__ and __getitem__

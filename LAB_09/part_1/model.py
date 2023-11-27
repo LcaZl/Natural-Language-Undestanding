@@ -1,4 +1,4 @@
-import torch.nn as nn
+from functions import *
 
 class LangModel(nn.Module):
     def __init__(self, nn_type, emb_size, hidden_size, output_size, pad_index=0, 
@@ -50,7 +50,7 @@ class LangModel(nn.Module):
         # Cosine similarity
         scores = []
         for i, x in enumerate(embs):
-            if i != self.pad_token:  # Evitare il token di padding
+            if i != self.pad_token:  # Avoid pad token
                 scores.append(cosine_similarity(x.reshape(1, -1), vector.reshape(1, -1))[0][0])
         
         # Take ids of the most similar tokens
