@@ -1,10 +1,9 @@
-
 from functions import *
 
-class SUBJ_Model(nn.Module):
+class LM_Model(nn.Module):
     def __init__(self, output_size, dropout = 0.1):#, vader=False):
         
-        super(SUBJ_Model, self).__init__()
+        super(LM_Model, self).__init__()
 
         self.bert = BertModel.from_pretrained('bert-base-uncased')
         self.fc = nn.Linear(self.bert.config.hidden_size, output_size)

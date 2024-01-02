@@ -111,7 +111,7 @@ def train_lm(parameters, model, optimizer):
 
 def load_model_and_print_ppl(model, parameters):
     """
-    Load a model and print its Perplexity (PPL) on the test dataset.
+    Load a pre trained model and print its Perplexity (PPL) on the test dataset.
 
     Parameters:
     - model (torch.nn.Module): untrained model architecture

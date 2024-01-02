@@ -1,4 +1,3 @@
-# Add functions or classes used for data loading and preprocessing
 # From LAB_09
 from functions import *
 

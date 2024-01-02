@@ -1,29 +1,5 @@
-# This file is used to run your functions and print the results
-# Please write your fuctions or classes in the functions.py
-
-# Import everything from functions.py file
 from functions import *
 
-"""The exsecise is to experiment with a CRF model on NER task. 
-You have to train and test a CRF with using different features 
-on the conll2002 corpus (the same that we used here in the lab).
-
-The features that you have to experiment with are:
-
-    Baseline using the fetures in sent2spacy_features
-        Train the model and print results on the test set
-    Add the "suffix" feature
-        Train the model and print results on the test set
-    Add all the features used in the tutorial on CoNLL dataset
-        Train the model and print results on the test set
-    Increase the feature window (number of previous and next token) to:
-        [-1, +1]
-            Train the model and print results on the test set
-        [-2, +2]
-            Train the model and print results on the test set
-
-The format of the results has to be the table that we used so far, that is:"""
-    
 if __name__ == "__main__":
 
     #Wrtite the code to load the datasets and to run your functions
@@ -62,7 +38,6 @@ if __name__ == "__main__":
     score_5 = test_crf(crf_5, c_test_set)
 
     # Comparison
-    
     all_scores = [score_0, score_1, score_2, score_3, score_4, score_5]
     labels = ["Baseline", "Spacy_1", "Spacy_2", "ConllTutorial", "FeatureWindow_1", "FeatureWindow_2"]    
     final_scores = []

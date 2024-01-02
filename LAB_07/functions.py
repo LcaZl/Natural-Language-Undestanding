@@ -238,8 +238,6 @@ class FeatureExtractor:
         # Here all configurations requested in lab exercise
         return [self.sent2features(sent, configuration) for sent in tqdm(dataset)]
 
-
-
 # CONSOLE INFO
 
 def dataset_info(training_sents, test_sents):

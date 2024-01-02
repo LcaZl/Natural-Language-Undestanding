@@ -27,7 +27,7 @@ UNK_TOKEN = 1
 BERT_MAX_LEN = 512
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 DEVICE = 'cuda:0'
-TESTING = True
+TESTING = False
 INFO_ENABLED = False
 
 from utils import *
@@ -250,7 +250,7 @@ def eval_loop(data, model, parameters):
             print(' - ref_s',ref_s)
             print(' - hyp_s',hyp_s)
             print(ex)
-            exit(0)
+        exit(0)
         
     report_intent = classification_report(ref_intents, hyp_intents,
                                           zero_division=False, output_dict=True)

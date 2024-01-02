@@ -95,7 +95,6 @@ def train_lm(parameters, model, optimizer):
         - model (torch.nn.Module): PyTorch model to train
         - optimizer (torch.optim.Optimizer): optimizer to use during training
 
-
         Returns:
         - final_ppl (float): perplexity of the best model on training set
         """  
@@ -187,7 +186,7 @@ def train_LangModelnt_avsgd(parameters, model, optimizer):
 
             pbar.set_description(f'Epoch_K: {epoch_K} - PPL:{PPL} - T:{T} - t:{t}')
 
-        # Average the saved weights to implement NT-AvSGD
+        # Average the saved weights (NT-AvSGD)
         if T != 0 and saved_weights:
             avg_weights = average_weights(saved_weights)
             model.load_state_dict(avg_weights)

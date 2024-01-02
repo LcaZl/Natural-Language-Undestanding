@@ -72,7 +72,7 @@ def experiment(parameters):
 
 def init_model(parameters, model_state = None):
 
-    model = SUBJ_Model(
+    model = LM_Model(
         output_size=parameters['output_size'],
         dropout=parameters['dropout']
     ).to(DEVICE)

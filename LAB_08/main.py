@@ -88,7 +88,7 @@ if __name__ == "__main__":
     lsmp_score, lsmp_df = wsd_evaluation(wsd_dataset, 'LeskSimp')
     experiments.append(lsmp_score)
 
-    #Traing orginal Lesk
+    # Training orginal Lesk
     print(' -> Training with Lesk original ...')
     lo_score, lo_df = wsd_evaluation(wsd_dataset, 'LeskOr')
     experiments.append(lo_score)
