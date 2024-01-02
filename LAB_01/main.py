@@ -3,7 +3,7 @@ from functions import *
 if __name__ == "__main__":
 
     # Book, frequency list and cut-off parameters
-    book = 'carroll-alice.txt'
+    book = 'milton-paradise.txt'
     N = 12 # Top N items of frequency list to show
     cut_off_bounds = [2,100] # Lower bound and upper bound for frequency cut-off
     stop_words_sets = ['None', 'NLTK', 'Spacy', 'Scikit']

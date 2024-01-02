@@ -89,10 +89,12 @@ if __name__ == "__main__":
 
     # 5 - Train and test my StupidBackoff implementation
     alpha = 0.4
+    epsilon = 0.01
     lm_mysb = train_model('MyStupidBackoff',
                             training_set, 
                             ngram_order,
-                            alpha = alpha)
+                            alpha = alpha,
+                            epsilon = epsilon)
     
     mysb_tested_sents, mysb_scores = test_model(lm_mysb, 
                                                 'MyStupidBackoff',

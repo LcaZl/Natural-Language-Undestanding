@@ -1,12 +1,14 @@
-# This file is used to run your functions and print the results
-# Please write your fuctions or classes in the functions.py
-
-# Import everything from functions.py file
 from functions import *
 
 if __name__ == "__main__":
-    # Wrtite the code to load the datasets and to run your functions
-    # Print the results
+
+    # Test sentences
+    sentences = [
+        "The chef in the kitchen cooked the meal with care",
+        "The waiter in the dining room served the food rapidly",
+        "The customer at the table enjoyed the dessert",
+        "The customer by the entrance enjoyed the atmosphere"
+    ]
 
     # Probabilistic Context-Free Grammar
     grammar_rules = [
@@ -53,32 +55,21 @@ if __name__ == "__main__":
 
     ]
 
-    # Test sentences
-    sentences = [
-        "The chef in the kitchen cooked the meal with care",
-        "The waiter in the dining room served the food rapidly",
-        "The customer at the table enjoyed the dessert",
-        "The customer by the entrance enjoyed the atmosphere"
-    ]
-
-    #tree_test()
+    tree_test()
 
     # Evaluate grammar with different sentences and parsers
     parsers = ['Viterbi', 'Chart', 'InsideChart', 'RandomChart']
-    PCFG = nltk.PCFG.fromstring(grammar_rules)
-    grammar_info(PCFG)
-    evaluate_grammar(PCFG, sentences, parsers)
+    myPCFG = nltk.PCFG.fromstring(grammar_rules)
+    grammar_info(myPCFG)
+    evaluate_grammar(myPCFG, sentences, parsers)
 
-    # Generating sents with NLTK
-    print(f'Generating sentences with nltk.generate.generate()')
-    start = Nonterminal('S')
-    n = 10
-    depth = 5
+    # Generate phrases with nltk
+    nltk_generate_phrases(myPCFG,Nonterminal('VP'), 20, 5)
+    nltk_generate_phrases(myPCFG,Nonterminal('NP'), 20, 10)
+    nltk_generate_phrases(myPCFG,Nonterminal('PP'), 20, 7)
+    nltk_generate_phrases(myPCFG,Nonterminal('N'), 20, 3)
 
-    for sent in nltk_generate(PCFG, n=n, depth=depth):
-        print('-',sent)
-
-    # Generating sents with PCFG
+    # Generating sents with PCFG module
     print(f'\n - Generate sentences with PCFG module:')
     PCFG_OM = pkg_pcfg.fromstring(grammar_rules)
     n = 10

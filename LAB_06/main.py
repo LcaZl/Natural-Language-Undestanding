@@ -14,19 +14,20 @@ if __name__ == "__main__":
     print('\nComponents loaded.\n')
 
     # Parameters and dataset
-    samples = 10
+    samples = 100
     sentences = dependency_treebank.sents()[-samples:]
     test_graphs = dependency_treebank.parsed_sents()[-samples:]
     graph_info(test_graphs[-1], 'Treebanks')
 
     # Loading parsers
-
-    # Parser conll configuration
     
     config = {"ext_names": {"conll_pd": "pandas"},
             "conversion_maps": {"DEPREL": {"nsubj": "subj"}}}
     
     spacy_parser = load_spacy_parser(config = config, verbose = False)
+    
+    config = {"ext_names": {"conll_pd": "pandas"},"conversion_maps": 
+              {"DEPREL": {"nsubj": "subj", "root":"ROOT"}}}
     stanza_parser = load_stanza_parser(config = config, verbose = False)
    
     # Parsing sentences with Spacy model
@@ -34,15 +35,15 @@ if __name__ == "__main__":
                                    sentences, 
                                    parser_name='Spacy',
                                    verbose=True)
-    spacy_graphs = [g for df, g in spacy_result]
+    spacy_graphs = [g for _, g in spacy_result]
 
     # Parsing sentences with Spacy_stanza model
     stanza_result = parse_sentences(stanza_parser, 
                                     sentences, 
                                     parser_name='Stanza',
                                     verbose=True)
-    stanza_graphs = [g for df, g in stanza_result]
-
+    stanza_graphs = [g for _, g in stanza_result]
+        
     # Comparing tags of the two parsers
     same_tags, diff_tags, diff_df = compare_tags(spacy_result, stanza_result)
     print(f"\n -> Number of same tags: {same_tags}")
@@ -53,5 +54,5 @@ if __name__ == "__main__":
     spacy_score = evaluate_parser(spacy_graphs, test_graphs, parser_name='Spacy')
     stanza_score = evaluate_parser(stanza_graphs, test_graphs, parser_name = 'Stanza')
 
-    print('LAS e UAS of each parser:\n')
+    print('LAS e UAS of each parser:\n', spacy_score, stanza_score)
     print(tabulate(pd.DataFrame([spacy_score, stanza_score]), headers='keys', tablefmt='grid'))

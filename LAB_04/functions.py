@@ -1,6 +1,5 @@
 import nltk
 import pandas as pd
-
 from spacy.tokenizer import Tokenizer
 from tqdm import tqdm
 import en_core_web_sm
@@ -11,9 +10,17 @@ from nltk.corpus import treebank
 nltk.download('universal_tagset')
 nltk.download('treebank')
 
-
 def prepare_dataset(train_size):
-    
+    """
+    Prepare the dataset for training and testing.
+
+    Parameters:
+    - train_size (float): The proportion of the dataset to be used for training
+
+    Returns:
+    - train_set (list): Train set contain tagged sentences
+    - test_set (list): Test set contain tagged sentences
+    """
     tagged_sentences = treebank.tagged_sents(tagset='universal') # [[('The', 'AT'), ('Fulton', 'NP-TL')...],
     train_set_size = int(len(tagged_sentences) * train_size)
     train_set = tagged_sentences[:train_set_size]

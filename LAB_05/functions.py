@@ -52,15 +52,13 @@ def evaluate_grammar(grammar, sentences, parsers):
     - parsers (list of str): list of parser types to use for parsing
     """
     for sent in sentences:
-        print(f'\n--> Sentence: {sent}')
 
         for parser_type in parsers:
 
             trees = generate_parsing_trees(grammar, sent, parser_type)
+            print(f'----> {len(trees)} trees generated.')
+            print(f'----> Sentence: {sent}')
             print_trees(trees)
-
-        print(f'\n--> Generated trees for current sentence ("{sent}"):')
-        print(f' - Viterbi: {len(trees)}\n - Chart: {len(trees)}\n - Inside Chart: {len(trees)}\n - Random Chart: {len(trees)}\n')
 
 def grammar_info(grammar):
     """
@@ -100,7 +98,17 @@ def print_trees(trees):
         tree.pretty_print(unicodelines=True, nodedist=5)
 
 
-"""def tree_test():
+def nltk_generate_phrases(grammar, start, n , depth):
+    """
+        Generating sents with NLTK
+    """
+    print(f'\nGenerating sentences with nltk.generate.generate()')
+    print(f'N: {n} - Start: {start} - Depth: {depth}')
+    for sent in nltk_generate(grammar, start=start, n=n, depth=depth):
+        print('-',sent)
+
+
+def tree_test():
         
         parse_tree_str = "(S (NP (PRON I)) (VP (V saw) (NP (Det the) (N man)) (PP (P with) (NP (Det a) (N telescope)))))"
         tree = Tree.fromstring(parse_tree_str)
@@ -126,5 +134,3 @@ def print_trees(trees):
 
         # Flatten
         print('Flatten:', tree.flatten() )
-
-"""

@@ -28,8 +28,7 @@ def load_spacy_parser(config = None, verbose = False):
     """
     print('Loading Spacy parser ...')
     spacy_nlp = spacy.load("en_core_web_sm")
-    if config is not None:
-        spacy_nlp.add_pipe("conll_formatter", config=config, last=True)
+    spacy_nlp.add_pipe("conll_formatter", config=config, last=True)
 
     spacy_nlp.tokenizer = Tokenizer(spacy_nlp.vocab)  
     if verbose:
@@ -53,10 +52,8 @@ def load_stanza_parser(config = None, verbose = False):
     stanza_nlp = spacy_stanza.load_pipeline("en", tokenize_pretokenized=True,
                                             download_method = None,
                                             verbose=False)
-    if config is not None:
-        config = {"ext_names": {"conll_pd": "pandas"},
-            "conversion_maps": {"DEPREL": {"nsubj": "subj", "root":"ROOT"}}}
-        stanza_nlp.add_pipe("conll_formatter", config=config, last=True)
+
+    stanza_nlp.add_pipe("conll_formatter", config=config, last=True)
 
     if verbose:
         show_model_config(stanza_nlp, 'Stanza')

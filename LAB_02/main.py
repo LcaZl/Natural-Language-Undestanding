@@ -65,10 +65,9 @@ if __name__ == "__main__":
     cross_validation_methods = ['kfold','skfold']
     cross_validation_folds = 5
     baseline_strategies = ['uniform','stratified','most_frequent']
-    evaluation_scores = ['accuracy','f1_weighted','recall_weighted']
+    evaluation_scores = ['accuracy','f1_weighted']
 
     # Loading dataset
-    
     dataset = fetch_20newsgroups(
                             subset='all', 
                             remove=('headers', 'footers', 'quotes'),
@@ -107,7 +106,7 @@ if __name__ == "__main__":
     dataset.data = [normalize_document(doc) for doc in tqdm(dataset.data)]
     print(f'\nDataset normalized!\n')
 
-    # Initialize the dataframe that will contain the average scores of each experiment.
+    # Initialize the dataframe that will contain the average scores of each experiment
     reports_comparison = pd.DataFrame()
 
     # Executing experiments

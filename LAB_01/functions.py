@@ -36,7 +36,7 @@ def compute_descriptive_stats(book, library, stop_word_set, frequency_list_metho
     Computes descriptive statistics for a given book corpus based on specified parameters.
     
     Parameters:
-    - book (str): The content of the book to be analyzed.
+    - book (str): The name of the book.
     - library (str): The library/tool to be used for corpus extraction (e.g., NLTK, spaCy).
     - stop_word_set (list/set): A collection of stop words to be removed from the corpus.
     - frequency_list_method (str): Method to generate frequency list.
@@ -67,7 +67,7 @@ def compute_descriptive_stats(book, library, stop_word_set, frequency_list_metho
     
     stats, lexicon = compute_corpus_statistics_and_lexicon(index, chars, words, sents)
     
-    # Get frequency list accordingly to input method, the chosen cut-off bounds and the specified number of top values.
+    # Get frequency list
     frequency_list = get_frequency_list([str(token) for token in words], frequency_list_method)
     frequency_list_cutted = cut_off(frequency_list, cut_off_bounds)
     frequency_list_nbest = dict(sorted(frequency_list_cutted.items(), key = lambda item: item[1], reverse= True)[:nbest_v])
@@ -193,7 +193,6 @@ def normalize_words(words):
     - Removing accent marks and other diacritics
     - Converting number words to numbers
     - Lemmatization
-    - Stemming
     - Removing empty strings or strings containing only whitespace
 
     Parameters:
@@ -203,7 +202,7 @@ def normalize_words(words):
     - list: List of normalized words.
 
     """
-    # Create a lemmatizer and stemmer instance
+    # Create a lemmatizer
     lemmatizer = WordNetLemmatizer()
 
     # Remove newline characters

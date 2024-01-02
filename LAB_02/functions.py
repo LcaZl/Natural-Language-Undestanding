@@ -167,10 +167,9 @@ def train_SVM(dataset, folds, cv_type, baseline_strategies, scores, C = 1, itera
                             verbose = True)
 
     # Extract and format the evaluation scores into a DataFrame  
-    cols = ['Accuracy','F1 Weighted','Recall Weighted']
+    cols = ['Accuracy','F1']
     df = pd.DataFrame(data= zip(scores['test_accuracy'], 
-                                scores['test_f1_weighted'],
-                                scores['test_recall_weighted']),
+                                scores['test_f1_weighted']),
                       columns = cols,
                       index = [f'{cv_type} - Fold {i}' for i, _ in enumerate(scores['test_accuracy'])])
     df_avg = df.mean()
@@ -276,7 +275,7 @@ def normalize_document(doc):
     # Tokenize the document
     words = word_tokenize(doc)
 
-    # Create a lemmatizer and stemmer instance
+    # Create a lemmatizer
     lemmatizer = WordNetLemmatizer()
 
     # Remove newline characters
