@@ -39,7 +39,7 @@ if __name__ == "__main__":
     experiments = {
         'Experiment_0': {
             'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM.pth',
+            'weight_path':f'bin/LSTM.pth',
             'optmz_type':'Adam',
             'clip':5,
             'optmz_learning_rate': 5e-3,
@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
         'Experiment_1': {
             'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM_WT.pth',
+            'weight_path':f'bin/LSTM_WT.pth',
             'optmz_type':'Adam',
             'clip':5,
             'optmz_learning_rate': 5e-3,
@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
         'Experiment_2': {
             'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM_WTVD.pth',
+            'weight_path':f'bin/LSTM_WTVD.pth',
             'optmz_type':'Adam',
             'clip':5,
             'optmz_learning_rate': 5e-3,
@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
         'Experiment_3': {
             'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM_NTAvSGD.pth',
+            'weight_path':f'bin/LSTM_NTAvSGD.pth',
             'optmz_type':'NT-AvSGD',
             'optmz_learning_rate':0.1,
             'weight_tying': False,
@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
         'Experiment_4': {
             'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM_NTAvSGD_WT.pth',
+            'weight_path':f'bin/LSTM_NTAvSGD_WT.pth',
             'optmz_type':'NT-AvSGD',
             'optmz_learning_rate':0.7,
             'clip':5,
@@ -98,7 +98,7 @@ if __name__ == "__main__":
 
         'Experiment_5': {
             'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM_NTAvSGD_WTVD.pth',
+            'weight_path':f'bin/LSTM_NTAvSGD_WTVD.pth',
             'optmz_type':'NT-AvSGD',
             'optmz_learning_rate':0.7,
             'clip':5,

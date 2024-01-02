@@ -56,7 +56,7 @@ def experiment(exp_id, parameters):
 
     print(f'\nStart Training:')
 
-    model_filename = f"models/JointBert_{exp_id}.pth"
+    model_filename = f"bin/JointBert_{exp_id}.pth"
 
     if os.path.exists(model_filename):
         saved_data = torch.load(model_filename)

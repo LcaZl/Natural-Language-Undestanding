@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
         'Experiment_1' : {
             'model_name':'RNN',
-            'weight_path':f'models_weight/labRNN.pth',
+            'weight_path':f'bin/labRNN.pth',
             'optmz_type':'SGD',
             'optmz_learning_rate':0.44,
             'output_dropout': 0,
@@ -46,7 +46,7 @@ if __name__ == "__main__":
 
         'Experiment_2': {
             'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM.pth',
+            'weight_path':f'bin/LSTM.pth',
             'optmz_type':'SGD',
             'optmz_learning_rate':0.44,
             'output_dropout': 0,
@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
         'Experiment_3': {
             'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM_dropout.pth',
+            'weight_path':f'bin/LSTM_dropout.pth',
             'optmz_type':'SGD',
             'optmz_learning_rate':0.44, 
             'output_dropout': 0.11, #235
@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
         'Experiment_4': {
             'model_name':'LSTM',
-            'weight_path':f'models_weight/LSTM_Adam.pth',
+            'weight_path':f'bin/LSTM_Adam.pth',
             'optmz_type':'Adam',
             'optmz_learning_rate':0.0001,
             'output_dropout': 0.116,

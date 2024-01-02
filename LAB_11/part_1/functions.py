@@ -43,7 +43,7 @@ def experiment(parameters):
             print(f' - {key}: {value}')
     print('\n')
 
-    model_filename = f"models/{parameters['task']}_model.pth"
+    model_filename = f"bin/{parameters['task']}_model.pth"
 
     if os.path.exists(model_filename): # Model founded
         saved_data = torch.load(model_filename)

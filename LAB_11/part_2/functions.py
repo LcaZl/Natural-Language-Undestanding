@@ -31,7 +31,7 @@ def experiment(parameters):
     print('\n')
 
     # Load model from file
-    model_filename = f"models/{parameters['task']}_model.pth"
+    model_filename = f"bin/{parameters['task']}_model.pth"
 
     if os.path.exists(model_filename):
 

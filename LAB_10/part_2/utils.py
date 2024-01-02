@@ -7,8 +7,8 @@ def load_data(path):
     return dataset
 
 def load_dataset():
-    tmp_train_raw = load_data('../ATIS/train.json')
-    test_raw = load_data('../ATIS/test.json')
+    tmp_train_raw = load_data('../dataset/ATIS/train.json')
+    test_raw = load_data('../dataset/ATIS/test.json')
     print('\nLoading and preparing dataset ...\n')
 
     portion = round(((len(tmp_train_raw) + len(test_raw)) * 0.10)/(len(tmp_train_raw)),2)
