@@ -1,4 +1,4 @@
-# NaturalLanguageUnderstanding
+# Natural Language Understanding Exercises
 
 Set up virtual environment for all labs
 
